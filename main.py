@@ -1,7 +1,9 @@
 import os
 import psycopg2
-import sqlite3
 import logging
+import http.server
+import socketserver
+import threading
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, ConversationHandler
 from dotenv import load_dotenv
@@ -961,5 +963,23 @@ def main():
     application.run_polling()
 
 
+class CustomHandler(http.server.SimpleHTTPRequestHandler):  
+    def do_GET(self):  
+        self.send_response(200)  
+        self.send_header("Content-type", "text/html")  
+        self.end_headers()  
+
+        self.wfile.write(b"<!doctype html><html><head><title>Server Status</title></head>")  
+        self.wfile.write(b"<body><h1>Bot is running...</h1></body></html>")  
+
+def run_web_server():  
+    port = int(os.environ.get('PORT', 5000))  
+    handler = CustomHandler  
+    with socketserver.TCPServer(("", port), handler) as httpd:  
+        print(f"Forwarder is running >> Serving at port {port}")  
+        httpd.serve_forever()  
+
 if __name__ == "__main__":
+    server_thread = threading.Thread(target=run_web_server)
+    server_thread.start()
     main()
