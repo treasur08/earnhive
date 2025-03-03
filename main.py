@@ -596,12 +596,12 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Notify admins
             user = update.effective_user
             admin_message = (
-                f"🔔 *New Withdrawal Request*\n\n"
+                f"🔔 <b>New Withdrawal Request</b>\n\n"
                 f"User: {user.first_name} (@{user.username})\n"
-                f"User ID: `{user_id}`\n"
+                f"User ID: <code>{user_id}</code>\n"
                 f"Amount: ₦{amount:.2f}\n"
                 f"Account: {account_number}\n\n"
-                f"Use /approve_{user_id}_{int(amount)} to approve or /reject_{user_id}_{int(amount)} to reject."
+                f"Use: \n<code>/approve_{user_id}_{int(amount)}</code> \nto approve or\n <code>/reject_{user_id}_{int(amount)}</code>\n to reject."
             )
             
             for admin_id in ADMIN_IDS:
@@ -609,7 +609,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.send_message(
                         chat_id=admin_id,
                         text=admin_message,
-                        parse_mode="Markdown"
+                        parse_mode="html"
                     )
                 except Exception as e:
                     logger.error(f"Failed to notify admin {admin_id}: {e}")
