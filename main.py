@@ -4,6 +4,8 @@ import logging
 import http.server
 import socketserver
 import threading
+import requests
+import time
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, ConversationHandler
 from dotenv import load_dotenv
@@ -980,6 +982,16 @@ def main():
     # Start the bot
     application.run_polling()
 
+def ping_server():
+    app_url = os.getenv('RENDER_EXTERNAL_URL', 'http://localhost:5000')
+    while True:
+        try:
+            response = requests.get(app_url)
+            print(f"Ping successful: {response.status_code}")
+        except Exception as e:
+            print(f"Ping failed: {e}")
+        time.sleep(300)  # 5 minutes
+
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):  
     def do_GET(self):  
@@ -999,5 +1011,8 @@ def run_web_server():
 
 if __name__ == "__main__":
     server_thread = threading.Thread(target=run_web_server)
+    ping_thread = threading.Thread(target=ping_server)
+
     server_thread.start()
+    ping_thread.start()
     main()
