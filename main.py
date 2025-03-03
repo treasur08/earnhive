@@ -748,8 +748,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data == "cancel":
         await query.message.delete()
         context.user_data.clear()
-        await context.user_data["awaiting_withdrawal_amount"] = False
-        await context.user_data["awaiting_account_number"] = False
+        context.user_data["awaiting_withdrawal_amount"] = False
+        context.user_data["awaiting_account_number"] = False
 
 # Admin commands
 async def handle_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
