@@ -524,7 +524,10 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             amount = float(update.message.text)
             if amount <= 0:
-                await update.message.reply_text("Please enter a valid amount greater than 0.")
+                keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text("Please enter a valid amount greater than 0.",
+                                                reply_markup=reply_markup)
                 return
             
             user_id = update.effective_user.id
@@ -544,18 +547,24 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
             account_number = result[1]
             
             if balance < amount:
+                keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(
                     f"⚠️ Insufficient balance.\n\n"
                     f"Your balance: ₦{balance:.2f}\n"
-                    f"Requested amount: ₦{amount:.2f}"
+                    f"Requested amount: ₦{amount:.2f}",
+                    reply_markup=reply_markup
                 )
                 conn.close()
                 return
         
             if amount < MIN_WITHDRAWAL:
+                keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.callback_query.edit_message_text(
                     f"⚠️ Minimum withdrawal amount is ₦{MIN_WITHDRAWAL}.\n\n"
-                    f"Your requested amount: ₦{amount:.2f}"
+                    f"Your requested amount: ₦{amount:.2f}",
+                    reply_markup=reply_markup
                 )
                 return
 
@@ -607,7 +616,8 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["awaiting_withdrawal_amount"] = False
             
         except ValueError:
-            await update.message.reply_text("Please enter a valid number.")
+            keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel")]]
+            await update.message.reply_text("Please enter a valid number.", reply_markup=InlineKeyboardMarkup(keyboard))
         
         return
     
@@ -647,8 +657,11 @@ async def handle_settings_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     
     if query.data == "set_account":
+        keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
-            "Please enter your account number:"
+            "Please enter your account number:",
+            reply_markup=reply_markup
         )
         context.user_data["awaiting_account_number"] = True
 
@@ -732,6 +745,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_withdrawal_callback(update, context)
     elif query.data.startswith("set_"):
         await handle_settings_callback(update, context)
+    elif query.data == "cancel":
+        await query.message.delete()
+        context.user_data.clear()
+        await context.user_data["awaiting_withdrawal_amount"] = False
+        await context.user_data["awaiting_account_number"] = False
 
 # Admin commands
 async def handle_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
