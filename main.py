@@ -15,9 +15,11 @@ logger = logging.getLogger(__name__)
 # Constants
 TELEGRAM_CHANNEL1_ID = os.getenv('TELEGRAM_CHANNEL1_ID')
 TELEGRAM_CHANNEL2_ID = os.getenv('TELEGRAM_CHANNEL2_ID')
+TELEGRAM_CHANNEL1_URL = os.getenv('TELEGRAM_CHANNEL1_URL')
+TELEGRAM_CHANNEL2_URL = os.getenv('TELEGRAM_CHANNEL2_URL')
 DATABASE_URL = os.getenv('DATABASE_URL')
 WHATSAPP_LINK = os.getenv('WHATSAPP_LINK')  
-ADMIN_IDS = [7502333334, 5991907369] 
+ADMIN_IDS = [7502333334, 5991907369, 7692366281] 
 REFERRAL_REWARD = 70 
 MIN_WITHDRAWAL = 400  
 
@@ -108,9 +110,9 @@ async def check_joined(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not channel1_joined or not channel2_joined:
                 # User hasn't joined all channels
                 keyboard = [
-                    [InlineKeyboardButton("Join Channel 1", url=f"https://t.me/maticgiveaways")],
-                    [InlineKeyboardButton("Join Channel 2", url=f"https://t.me/giveaway_who")],
-                    [InlineKeyboardButton("Join WhatsApp Group", url=WHATSAPP_LINK, callback_data="whatsapp_clicked")],
+                    [InlineKeyboardButton("🔗 Join Channel 1", url=f"{TELEGRAM_CHANNEL1_URL}")],
+                    [InlineKeyboardButton("🔗 Join Channel 2", url=f"{TELEGRAM_CHANNEL2_URL}")],
+                    [InlineKeyboardButton("🔗 Join WhatsApp Group", url=WHATSAPP_LINK, callback_data="whatsapp_clicked")],
                     [InlineKeyboardButton("✅ Check My Subscription", callback_data="check_subscription")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
