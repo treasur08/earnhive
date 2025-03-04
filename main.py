@@ -443,8 +443,50 @@ async def handle_withdrawal_callback(update: Update, context: ContextTypes.DEFAU
         amount = float(data.split("_")[1])
         await process_withdrawal(update, context, user_id, amount)
 
+async def check_referral_subscriptions(user_id, context):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Get all referrals for this user
+    cursor.execute("""
+    SELECT u.user_id, u.first_name, s.channel1_joined, s.channel2_joined 
+    FROM users u 
+    LEFT JOIN subscriptions s ON u.user_id = s.user_id 
+    WHERE u.referrer_id = %s
+    """, (user_id,))
+    
+    referrals = cursor.fetchall()
+    conn.close()
+    
+    if not referrals:
+        return True, []
+    
+    unsubscribed = []
+    for ref in referrals:
+        ref_id, first_name, ch1, ch2 = ref
+        if not ch1 or not ch2:
+            unsubscribed.append((ref_id, first_name))
+    
+    unsubscribed_percentage = (len(unsubscribed) / len(referrals)) * 100
+    
+    if unsubscribed_percentage > 70:
+        unsubscribed_list = [f"<a href='tg://user?id={uid}'>{name}</a>" for uid, name in unsubscribed]
+        message = (
+            "❌ 70% of the people you referred are not subscribed to the channels!\n\n"
+            "List of your referrals not subscribed:\n"
+            f"{chr(10).join(unsubscribed_list)}\n\n"
+            f"Please remind them to join:\n"
+            f"Channel 1: {TELEGRAM_CHANNEL1_URL}\n"
+            f"Channel 2: {TELEGRAM_CHANNEL2_URL}"
+        )
+        return False, message
+    
+    return True, []
+
 # Process withdrawal request
 async def process_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id, amount):
+    
+    
     # Check if user has sufficient balance
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -456,6 +498,15 @@ async def process_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE,
         conn.close()
         return
     
+    check_passed, message = await check_referral_subscriptions(user_id, context)
+    if not check_passed:
+        await update.callback_query.edit_message_text(
+            message,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+        return
+
     balance = result[0]
     account_number = result[1]
     
@@ -540,9 +591,19 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
             cursor.execute("SELECT balance, account_number FROM users WHERE user_id = %s", (user_id,))
             result = cursor.fetchone()
             
+            
             if not result:
                 await update.message.reply_text("Error retrieving your account information.")
                 conn.close()
+                return
+
+            check_passed, message = await check_referral_subscriptions(user_id, context)
+            if not check_passed:
+                await update.callback_query.edit_message_text(
+                    message,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True
+                )
                 return
             
             balance = result[0]
