@@ -449,7 +449,7 @@ async def check_referral_subscriptions(user_id, context):
     
     # Get all referrals for this user
     cursor.execute("""
-    SELECT u.user_id, u.first_name, s.channel1_joined, s.channel2_joined 
+    SELECT u.user_id, u.first_name, u.username, s.channel1_joined, s.channel2_joined 
     FROM users u 
     LEFT JOIN subscriptions s ON u.user_id = s.user_id 
     WHERE u.referrer_id = %s
@@ -463,21 +463,28 @@ async def check_referral_subscriptions(user_id, context):
     
     unsubscribed = []
     for ref in referrals:
-        ref_id, first_name, ch1, ch2 = ref
+        ref_id, first_name, username, ch1, ch2 = ref
         if not ch1 or not ch2:
-            unsubscribed.append((ref_id, first_name))
-    
+            if username:
+                unsubscribed.append(f"<a href='https://t.me/{username}'>{first_name}</a>")
+            elif ref_id:
+                unsubscribed.append(f"<a href='tg://user?id={ref_id}'>{first_name}</a>")
+            else:
+                unsubscribed.append(first_name)
+
     unsubscribed_percentage = (len(unsubscribed) / len(referrals)) * 100
     
-    if unsubscribed_percentage > 70:
+    if unsubscribed_percentage > 80:
         unsubscribed_list = [f"<a href='tg://user?id={uid}'>{name}</a>" for uid, name in unsubscribed]
         message = (
-            "❌ 70% of the people you referred are not subscribed to the channels!\n\n"
+            "❌ 80% of the people you referred are not subscribed to the channels!\n\n"
             "List of your referrals not subscribed:\n"
             f"{chr(10).join(unsubscribed_list)}\n\n"
             f"Please remind them to join:\n"
             f"Channel 1: {TELEGRAM_CHANNEL1_URL}\n"
-            f"Channel 2: {TELEGRAM_CHANNEL2_URL}"
+            f"Channel 2: {TELEGRAM_CHANNEL2_URL}\n"
+            f"Whatsapp Group: {WHATSAPP_LINK}\n"
+
         )
         return False, message
     
