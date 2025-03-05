@@ -23,9 +23,9 @@ TELEGRAM_CHANNEL1_URL = os.getenv('TELEGRAM_CHANNEL1_URL')
 TELEGRAM_CHANNEL2_URL = os.getenv('TELEGRAM_CHANNEL2_URL')
 DATABASE_URL = os.getenv('DATABASE_URL')
 WHATSAPP_LINK = os.getenv('WHATSAPP_LINK')  
-ADMIN_IDS = [7502333334, 5991907369, 7692366281] 
-REFERRAL_REWARD = 60 
-MIN_WITHDRAWAL = 500  
+ADMIN_IDS = [ 5991907369, 7692366281] 
+REFERRAL_REWARD = 200 
+MIN_WITHDRAWAL = 600  
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
@@ -68,6 +68,24 @@ def setup_database():
         status TEXT DEFAULT 'pending',
         request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (user_id)
+    )
+    ''')
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS activation_codes (
+        code TEXT PRIMARY KEY,
+        used_by BIGINT,
+        used_date TIMESTAMP,
+        status TEXT DEFAULT 'active'
+    )
+    ''')
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS referral_rewards (
+        id SERIAL PRIMARY KEY,
+        referrer_id BIGINT,
+        referred_user_id BIGINT,
+        amount REAL,
+        reward_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(referrer_id, referred_user_id)
     )
     ''')
     
@@ -179,6 +197,40 @@ async def check_joined(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return True
 
+import random
+import string
+
+async def generate_codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+        
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Usage: /gen <amount>")
+        return
+        
+    amount = int(context.args[0])
+    codes = []
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    for _ in range(amount):
+        while True:
+            random_part = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            code = f"EHV-{random_part}"
+            cursor.execute("SELECT code FROM activation_codes WHERE code = %s", (code,))
+            if not cursor.fetchone():
+                codes.append(code)
+                cursor.execute("INSERT INTO activation_codes (code) VALUES (%s)", (code,))
+                break
+    
+    conn.commit()
+    conn.close()
+    
+    codes_text = "\n".join(f"`{code}`" for code in codes)
+    await update.message.reply_text(
+        f"Generated {amount} new codes:\n\n{codes_text}",
+        parse_mode="Markdown"
+    )
 # Decorator for checking subscription
 def subscription_required(func):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
@@ -193,62 +245,144 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = user.id
     username = user.username
     first_name = user.first_name
-    
-    # Check if user exists in database
+
+    # Admin fast-track
+    if user_id in ADMIN_IDS:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (user_id,))
+        existing_admin = cursor.fetchone()
+        
+        if not existing_admin:
+            cursor.execute('''
+            INSERT INTO users (user_id, username, first_name, balance)
+            VALUES (%s, %s, %s, %s)
+            ''', (user_id, username, first_name, 0))
+            conn.commit()
+        
+        conn.close()
+        await show_main_menu(update, context)
+        return
+
+    # Database connection
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (user_id,))
-    existing_user = cursor.fetchone()
     
-    # Get referrer from deep link if available
-    referrer_id = None
-    if context.args and context.args[0].isdigit():
-        referrer_id = int(context.args[0])
-        # Make sure referrer exists and is not the same as user
-        if referrer_id == user_id:
-            referrer_id = None
-        else:
-            cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (referrer_id,))
-            if not cursor.fetchone():
-                referrer_id = None
-    
-    if not existing_user:
-        # New user, add to database
+    try:
+        # Check existing user
+        cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (user_id,))
+        existing_user = cursor.fetchone()
+
+        if existing_user:
+            conn.close()
+            if not await check_joined(update, context):
+                return
+            await show_main_menu(update, context)
+            return
+
+        # Handle activation requirement
+        if os.getenv('ACTIVATION', 'False') == 'True':
+            if context.args and context.args[0].isdigit():
+                context.user_data['referrer_id'] = int(context.args[0])
+
+            keyboard = [
+                [InlineKeyboardButton("🔗 Join Channel 1", url=TELEGRAM_CHANNEL1_URL)],
+                [InlineKeyboardButton("🔗 Join Channel 2", url=TELEGRAM_CHANNEL2_URL)],
+                [InlineKeyboardButton("🔗 Join WhatsApp Group", url=WHATSAPP_LINK)],
+                [InlineKeyboardButton("💳 Buy Activation Code I", url="https://t.me/spinnsisnbot?text=I+want+to+purchase+EarnHive+code")],
+                [InlineKeyboardButton("💳 Buy Activation Code II", url="https://t.me/Obin79?text=I+want+to+purchase+EarnHive+code")]
+
+            ]
+            await update.message.reply_text(
+                "*🎉 Welcome to EarnHive! 🐝*\n\n"
+                "To start earning:\n"
+                "1. Get your activation code\n"
+                "2. Enter code using command:\n"
+                "`/code EHV-XXXXXXXX`\n\n"
+                "Need a code? Click 'Buy Activation Code' below!\n"
+                "Code Price: *₦ 300*\n"
+                "You Now earn ₦200 for each successful referrals"
+                "Withdrawal is lightning fast ⚡",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
+            conn.close()
+            return
+
+        # Process referral
+        referrer_id = None
+        if context.args and context.args[0].isdigit():
+            referrer_id = int(context.args[0])
+            if referrer_id != user_id:
+                cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (referrer_id,))
+                if not cursor.fetchone():
+                    referrer_id = None
+
+        # Register new user
         cursor.execute('''
         INSERT INTO users (user_id, username, first_name, referrer_id)
         VALUES (%s, %s, %s, %s)
         ''', (user_id, username, first_name, referrer_id))
         conn.commit()
-    
-    conn.close()
-    
-    # Check if user has joined required channels
-    if not await check_joined(update, context):
-        return
-    
-    # If user was referred and this is their first time, reward referrer
-    if not existing_user and referrer_id:
-        await reward_referrer(referrer_id, context)
-    
-    # Show main menu
-    await show_main_menu(update, context)
+
+        # Handle referral reward
+        if referrer_id:
+            await reward_referrer(referrer_id, context)
+
+        # Verify channel subscription
+        if not await check_joined(update, context):
+            return
+
+        # Show main menu
+        await show_main_menu(update, context)
+
+    finally:
+        conn.close()
+
 
 # Reward referrer
 async def reward_referrer(referrer_id, context):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get referred user's info
-    cursor.execute("SELECT username, first_name FROM users WHERE referrer_id = %s ORDER BY joined_date DESC LIMIT 1", (referrer_id,))
-    referred_user = cursor.fetchone()
-    referred_name = f"@{referred_user[0]}" if referred_user[0] else referred_user[1]
+    # First check if reward was already given for the latest referral
+    cursor.execute("""
+    SELECT user_id FROM users 
+    WHERE referrer_id = %s 
+    ORDER BY joined_date DESC LIMIT 1
+    """, (referrer_id,))
+    latest_referral = cursor.fetchone()
     
-    # Update referrer's balance with REFERRAL_REWARD
-    cursor.execute('''
+    if not latest_referral:
+        conn.close()
+        return
+        
+    # Check if this referral was already rewarded
+    cursor.execute("""
+    SELECT id FROM referral_rewards 
+    WHERE referrer_id = %s AND referred_user_id = %s
+    """, (referrer_id, latest_referral[0]))
+    
+    if cursor.fetchone():
+        conn.close()
+        return
+        
+    # If not rewarded yet, give the reward and log it
+    cursor.execute("""
+    INSERT INTO referral_rewards (referrer_id, referred_user_id, amount)
+    VALUES (%s, %s, %s)
+    """, (referrer_id, latest_referral[0], REFERRAL_REWARD))
+    
+    cursor.execute("""
     UPDATE users 
     SET balance = balance + %s 
     WHERE user_id = %s
-    ''', (REFERRAL_REWARD, referrer_id))
+    """, (REFERRAL_REWARD, referrer_id))
+    
+    # Get referred user's info for notification
+    cursor.execute("SELECT username, first_name FROM users WHERE user_id = %s", (latest_referral[0],))
+    referred_user = cursor.fetchone()
+    referred_name = f"@{referred_user[0]}" if referred_user[0] else referred_user[1]
     
     # Get updated balance
     cursor.execute("SELECT balance FROM users WHERE user_id = %s", (referrer_id,))
@@ -257,7 +391,7 @@ async def reward_referrer(referrer_id, context):
     conn.commit()
     conn.close()
     
-    # Send enhanced notification to referrer
+    # Notify referrer
     try:
         await context.bot.send_message(
             chat_id=referrer_id,
@@ -267,7 +401,6 @@ async def reward_referrer(referrer_id, context):
         )
     except Exception as e:
         logger.error(f"Failed to notify referrer: {e}")
-
 
 # Show main menu
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -396,8 +529,8 @@ async def show_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not result or not result[0]:
         await update.message.reply_text(
-            "⚠️ You need to set your account number before withdrawing.\n\n"
-            "Go to ⚙️ Settings to set your account number."
+            "⚠️ You need to set your account details before withdrawing.\n\n"
+            "Go to ⚙️ Settings to set your account details."
         )
         return
     
@@ -417,7 +550,7 @@ async def show_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"💸 *Withdrawal*\n\n"
         f"Your balance: ₦{balance:.2f}\n"
-        f"Account number:\n {account_number}\n\n"
+        f"Account details:\n {account_number}\n\n"
         f"Select withdrawal amount:",
         reply_markup=reply_markup,
         parse_mode="Markdown"
@@ -709,14 +842,18 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     account_number = result[0] if result and result[0] else "Not set"
     
     keyboard = [
-        [InlineKeyboardButton("Set Account Number", callback_data="set_account")]
+        [InlineKeyboardButton("Set Account Details", callback_data="set_account")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
         f"⚙️ *Settings*\n\n"
         f"Account Number: {account_number}\n\n"
-        f"Use the button below to update your settings:",
+        f"Use the button below to update your settings:\n\n"
+        "```Format:\n"
+        "123456789\n"
+        "Chuks Onyema\n"
+        "First Bank Of Nigeria```",
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
@@ -730,7 +867,7 @@ async def handle_settings_callback(update: Update, context: ContextTypes.DEFAULT
         keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
-            "Please enter your account number:",
+            "Please enter your account details:",
             reply_markup=reply_markup
         )
         context.user_data["awaiting_account_number"] = True
@@ -1005,6 +1142,70 @@ async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("🚫 Broadcast cancelled")
     return ConversationHandler.END
 
+async def activate_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (user_id,))
+    existing_user = cursor.fetchone()
+    
+    if existing_user:
+        await update.message.reply_text(
+            "✅ You are already registered!\n\n"
+            "Share your unused activation codes with your referrals to earn rewards."
+        )
+        conn.close()
+        return
+    if not context.args:
+        await update.message.reply_text("Please enter your activation code:\n\n /code EHV-XXXXXXXX")
+        return
+        
+    code = context.args[0].upper()
+    user_id = update.effective_user.id
+    user = update.effective_user
+    
+    
+    
+    cursor.execute("SELECT status FROM activation_codes WHERE code = %s", (code,))
+    result = cursor.fetchone()
+    
+    referrer_id = context.user_data.get('referrer_id')
+
+    if not result:
+        await update.message.reply_text("❌ Invalid activation code!")
+        conn.close()
+        return
+        
+    if result[0] == 'used':
+        await update.message.reply_text("❌ This code has already been used!")
+        conn.close()
+        return
+        
+    # Mark code as used
+    cursor.execute("""
+    UPDATE activation_codes 
+    SET status = 'used', used_by = %s, used_date = CURRENT_TIMESTAMP 
+    WHERE code = %s
+    """, (user_id, code))
+    
+    # Register user
+    user = update.effective_user
+    cursor.execute('''
+    INSERT INTO users (user_id, username, first_name, referrer_id)
+    VALUES (%s, %s, %s, %s)
+    ''', (user_id, user.username, user.first_name, referrer_id))
+    
+    conn.commit()
+    conn.close()
+
+    # If there's a referrer, reward them
+    if referrer_id:
+        await reward_referrer(referrer_id, context)
+    
+    await update.message.reply_text("✅ Activation successful! Welcome to EarnHive!")
+    await check_joined(update, context)
+
 # Main function
 def main():
     # Setup database
@@ -1022,6 +1223,8 @@ def main():
     # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("reset", reset_db))
+    application.add_handler(CommandHandler("gen", generate_codes))
+    application.add_handler(CommandHandler("code", activate_code))
     
     # Add broadcast handler
     broadcast_handler = ConversationHandler(
@@ -1069,6 +1272,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
         self.wfile.write(b"<!doctype html><html><head><title>Server Status</title></head>")  
         self.wfile.write(b"<body><h1>Bot is running...</h1></body></html>")  
+
 
 def run_web_server():  
     port = int(os.environ.get('PORT', 5000))  
