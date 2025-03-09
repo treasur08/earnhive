@@ -572,8 +572,9 @@ async def handle_withdrawal_callback(update: Update, context: ContextTypes.DEFAU
         
         if current_time.date().month != 3 or current_time.date().day != 12:
             await query.answer(
-                "🕒 Withdrawals will be available on March 12, 2024.\n\n"
-                "Keep referring to increase your earnings!"
+                "🕒 Withdrawals will be available on Wednesday March 12, 2024.\n\n"
+                "Keep referring to increase your earnings!",
+                show_alert=True
             )
             return
         if data == "withdraw_custom":
@@ -643,11 +644,12 @@ async def process_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE,
     if current_time.date().month != 3 or current_time.date().day != 12:
         await query.answer(
             "🕒 Withdrawals will be available on Wednesday, March 12, 2024.\n\n"
-            "Keep referring to increase your earnings!"
+            "Keep referring to increase your earnings!",
+            show_alert=True
         )
         return
     await query.answer()
-    
+
     # Check if user has sufficient balance
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -740,8 +742,9 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if current_time.date().month != 3 or current_time.date().day != 12:
             await update.message.reply_text(
-                "🕒 Withdrawals will be available on March 12, 2024.\n\n"
-                "Keep referring to increase your earnings!"
+                "🕒 Withdrawals will be available on Wednesday March 12, 2024.\n\n"
+                "Keep referring to increase your earnings!",
+                show_alert=True
             )
             return
         try:
