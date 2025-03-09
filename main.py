@@ -5,6 +5,8 @@ import http.server
 import socketserver
 import threading
 import requests
+from datetime import datetime
+import pytz
 import time
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, ConversationHandler
@@ -24,8 +26,8 @@ TELEGRAM_CHANNEL2_URL = os.getenv('TELEGRAM_CHANNEL2_URL')
 DATABASE_URL = os.getenv('DATABASE_URL')
 WHATSAPP_LINK = os.getenv('WHATSAPP_LINK')  
 ADMIN_IDS = [ 5991907369, 7692366281] 
-REFERRAL_REWARD = 200 
-MIN_WITHDRAWAL = 600  
+REFERRAL_REWARD = 100 
+MIN_WITHDRAWAL = 1500  
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
@@ -559,12 +561,21 @@ async def show_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Handle withdrawal callback
 async def handle_withdrawal_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    
     
     user_id = update.effective_user.id
     data = query.data
     
     if data.startswith("withdraw_"):
+        nigeria_tz = pytz.timezone('Africa/Lagos')
+        current_time = datetime.now(nigeria_tz)
+        
+        if current_time.date().month != 3 or current_time.date().day != 12:
+            await query.answer(
+                "🕒 Withdrawals will be available on March 12, 2024.\n\n"
+                "Keep referring to increase your earnings!"
+            )
+            return
         if data == "withdraw_custom":
             await query.edit_message_text(
                 "Please enter the amount you want to withdraw:",
@@ -575,7 +586,7 @@ async def handle_withdrawal_callback(update: Update, context: ContextTypes.DEFAU
         # Extract amount from callback data
         amount = float(data.split("_")[1])
         await process_withdrawal(update, context, user_id, amount)
-
+    await query.answer()
 async def check_referral_subscriptions(user_id, context):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -625,7 +636,17 @@ async def check_referral_subscriptions(user_id, context):
 
 # Process withdrawal request
 async def process_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id, amount):
+    query = update.callback_query
+    nigeria_tz = pytz.timezone('Africa/Lagos')
+    current_time = datetime.now(nigeria_tz)
     
+    if current_time.date().month != 3 or current_time.date().day != 12:
+        await query.answer(
+            "🕒 Withdrawals will be available on Wednesday, March 12, 2024.\n\n"
+            "Keep referring to increase your earnings!"
+        )
+        return
+    await query.answer()
     
     # Check if user has sufficient balance
     conn = get_db_connection()
@@ -714,6 +735,15 @@ async def process_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE,
 # Handle custom withdrawal amount
 async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "awaiting_withdrawal_amount" in context.user_data and context.user_data["awaiting_withdrawal_amount"]:
+        nigeria_tz = pytz.timezone('Africa/Lagos')
+        current_time = datetime.now(nigeria_tz)
+        
+        if current_time.date().month != 3 or current_time.date().day != 12:
+            await update.message.reply_text(
+                "🕒 Withdrawals will be available on March 12, 2024.\n\n"
+                "Keep referring to increase your earnings!"
+            )
+            return
         try:
             amount = float(update.message.text)
             if amount <= 0:
