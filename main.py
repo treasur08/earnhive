@@ -38,8 +38,7 @@ def setup_database():
     cursor = conn.cursor()
     
     # Create users table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS users (
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
         user_id BIGINT PRIMARY KEY,
         username TEXT,
         first_name TEXT,
@@ -48,35 +47,36 @@ def setup_database():
         referrer_id BIGINT,
         joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         whatsapp_clicked INTEGER DEFAULT 0
-    )
-    ''')
+    )''')
     
     # Create subscriptions table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS subscriptions (
+    cursor.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
         user_id BIGINT PRIMARY KEY,
         channel1_joined BIGINT DEFAULT 0,
         channel2_joined BIGINT DEFAULT 0,
         FOREIGN KEY (user_id) REFERENCES users (user_id)
-    )
-    ''')
+    )''')
     
     # Create withdrawals table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS withdrawals (
+    cursor.execute('''CREATE TABLE IF NOT EXISTS withdrawals (
         id SERIAL PRIMARY KEY,
         user_id BIGINT,
         amount REAL,
         status TEXT DEFAULT 'pending',
         request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (user_id)
-    )
-    ''')
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS activation_codes (
+    )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS activation_codes (
         code TEXT PRIMARY KEY,
         used_by BIGINT,
         used_date TIMESTAMP,
+        status TEXT DEFAULT 'active'
+    )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS referral_rewards (
+        id SERIAL PRIMARY KEY,
+        referrer_id BIGINT,
+        referred_user_id BIGINT,
+        amount REAL,
         status TEXT DEFAULT 'active'
     )
     ''')
@@ -567,12 +567,13 @@ async def handle_withdrawal_callback(update: Update, context: ContextTypes.DEFAU
     data = query.data
     
     if data.startswith("withdraw_"):
+        
         nigeria_tz = pytz.timezone('Africa/Lagos')
         current_time = datetime.now(nigeria_tz)
-        
-        if current_time.date().month != 3 or current_time.date().day != 12:
+
+        if not (18 <= current_time.hour < 20):
             await query.answer(
-                "🕒 Withdrawals will be available on Wednesday March 12, 2024.\n\n"
+                "🕒 Withdrawals are only available from 6 PM to 8 PM daily.\n\n"
                 "Keep referring to increase your earnings!",
                 show_alert=True
             )
@@ -640,14 +641,14 @@ async def process_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE,
     query = update.callback_query
     nigeria_tz = pytz.timezone('Africa/Lagos')
     current_time = datetime.now(nigeria_tz)
-    
-    if current_time.date().month != 3 or current_time.date().day != 12:
-        await query.answer(
-            "🕒 Withdrawals will be available on Wednesday, March 12, 2024.\n\n"
-            "Keep referring to increase your earnings!",
-            show_alert=True
-        )
-        return
+
+    if not (18 <= current_time.hour < 20):
+            await query.answer(
+                "🕒 Withdrawals are only available from 6 PM to 8 PM daily.\n\n"
+                "Keep referring to increase your earnings!",
+                show_alert=True
+            )
+            return
     await query.answer()
 
     # Check if user has sufficient balance
@@ -739,14 +740,16 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "awaiting_withdrawal_amount" in context.user_data and context.user_data["awaiting_withdrawal_amount"]:
         nigeria_tz = pytz.timezone('Africa/Lagos')
         current_time = datetime.now(nigeria_tz)
-        
-        if current_time.date().month != 3 or current_time.date().day != 12:
+
+# Check if current time is between 6 PM (18:00) and 8 PM (20:00)
+        if not (18 <= current_time.hour < 20):
             await update.message.reply_text(
-                "🕒 Withdrawals will be available on Wednesday March 12, 2024.\n\n"
-                "Keep referring to increase your earnings!",
-                show_alert=True
+                "🕒 Withdrawals are only available from 6 PM to 8 PM daily.\n\n"
+                "Keep referring to increase your earnings!"
             )
             return
+        
+       
         try:
             amount = float(update.message.text)
             if amount <= 0:
