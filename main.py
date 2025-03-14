@@ -5,7 +5,7 @@ import http.server
 import socketserver
 import threading
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import time
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
@@ -26,8 +26,16 @@ TELEGRAM_CHANNEL2_URL = os.getenv('TELEGRAM_CHANNEL2_URL')
 DATABASE_URL = os.getenv('DATABASE_URL')
 WHATSAPP_LINK = os.getenv('WHATSAPP_LINK')  
 ADMIN_IDS = [ 5991907369, 7692366281] 
-REFERRAL_REWARD = 100 
-MIN_WITHDRAWAL = 1500  
+REFERRAL_REWARD = 50 
+MIN_WITHDRAWAL = 500  
+PROMO_START = datetime(2025, 3, 15, 9, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
+PROMO_END = datetime(2025, 3, 15, 23, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
+PROMO_REWARD = 10000 
+
+def is_promo_active():
+    now = datetime.now(pytz.timezone('Africa/Lagos'))
+    return PROMO_START <= now <= PROMO_END
+
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
@@ -90,7 +98,15 @@ def setup_database():
         UNIQUE(referrer_id, referred_user_id)
     )
     ''')
-    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS promo_referrals (
+        id SERIAL PRIMARY KEY,
+        referrer_id BIGINT,
+        referred_id BIGINT,
+        referred_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(referrer_id, referred_id)
+    )
+    ''')
     conn.commit()
     conn.close()
 
@@ -381,6 +397,13 @@ async def reward_referrer(referrer_id, context):
     WHERE user_id = %s
     """, (REFERRAL_REWARD, referrer_id))
     
+    if is_promo_active():
+        cursor.execute("""
+        INSERT INTO promo_referrals (referrer_id, referred_id)
+        VALUES (%s, %s)
+        ON CONFLICT (referrer_id, referred_id) DO NOTHING
+        """, (referrer_id, latest_referral[0]))
+    
     # Get referred user's info for notification
     cursor.execute("SELECT username, first_name FROM users WHERE user_id = %s", (latest_referral[0],))
     referred_user = cursor.fetchone()
@@ -409,7 +432,8 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         ['💰 Balance', '👥 Refer & Earn'],
         ['💸 Withdraw', '⚙️ Settings'],
-        ['🏆 Top Earners', '📞 Help & Ads']  
+        ['🏆 Top Earners', '🎁 Free ₦10k Reward'],  
+        ['📞 Help & Ads']  
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
@@ -463,6 +487,8 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_withdrawal(update, context)
     elif text == '⚙️ Settings':
         await show_settings(update, context)
+    elif text == '🎁 Free ₦10k Reward':
+        await show_promo_leaderboard(update, context)
     elif text == '🏆 Top Earners':
         await show_top_earners(update, context)
     elif text == '📞 Help & Ads':
@@ -471,6 +497,138 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('For help and Advertisements booking, click the button below to contact us 👇', reply_markup=reply_markup)
     else:
         pass
+
+@subscription_required
+async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    now = datetime.now(pytz.timezone('Africa/Lagos'))
+    
+    if now < PROMO_START:
+        await update.message.reply_text(
+            "🏆 *Free ₦10,000 Reward Contest*\n\n"
+            "This contest hasn't started yet!\n\n"
+            f"Starts: {PROMO_START.strftime('%B %d, %Y at %I:%M %p')}\n"
+            f"Ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
+            "The user with the most referrals during this 24-hour period will win ₦10,000!",
+            parse_mode="Markdown"
+        )
+        return
+    
+    if now > PROMO_END:
+        # Contest is over, show winner
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+        SELECT referrer_id, COUNT(*) as ref_count 
+        FROM promo_referrals 
+        WHERE referred_time BETWEEN %s AND %s 
+        GROUP BY referrer_id 
+        ORDER BY ref_count DESC 
+        LIMIT 1
+        """, (PROMO_START, PROMO_END))
+        
+        winner = cursor.fetchone()
+        
+        if winner and winner[1] > 0:
+            winner_id, ref_count = winner
+            
+            # Get winner's name
+            cursor.execute("SELECT username, first_name FROM users WHERE user_id = %s", (winner_id,))
+            winner_info = cursor.fetchone()
+            winner_name = f"@{winner_info[0]}" if winner_info[0] else winner_info[1]
+            
+            # Check if reward was already given
+            cursor.execute("SELECT 1 FROM users WHERE user_id = %s AND balance >= %s", (winner_id, PROMO_REWARD))
+            already_rewarded = cursor.fetchone() is not None
+            
+            if not already_rewarded:
+                # Credit winner
+                cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", 
+                              (PROMO_REWARD, winner_id))
+                conn.commit()
+                
+                # Notify winner
+                try:
+                    await context.bot.send_message(
+                        chat_id=winner_id,
+                        text=f"🎉 Congratulations! You won the referral contest with {ref_count} referrals!\n\n"
+                             f"✅ Reward: ₦{PROMO_REWARD} has been added to your balance."
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify winner: {e}")
+                
+                # Notify admins
+                for admin_id in ADMIN_IDS:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=admin_id,
+                            text=f"🏆 Promo Winner: {winner_name} (ID: {winner_id})\n"
+                                 f"Referrals: {ref_count}\n"
+                                 f"Reward: ₦{PROMO_REWARD}"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to notify admin {admin_id}: {e}")
+            
+            await update.message.reply_text(
+                f"🏆 *Free ₦10,000 Reward Contest Results*\n\n"
+                f"Winner: {winner_name}\n"
+                f"Referrals: {ref_count}\n\n"
+                f"Congratulations to our winner! The reward of ₦{PROMO_REWARD} has been credited to their account.",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(
+                "🏆 *Free ₦10,000 Reward Contest Results*\n\n"
+                "No participants qualified for the contest.",
+                parse_mode="Markdown"
+            )
+        
+        conn.close()
+        return
+    
+    # Contest is active, show current standings
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+    SELECT pr.referrer_id, COUNT(*) as ref_count, u.username, u.first_name
+    FROM promo_referrals pr
+    JOIN users u ON pr.referrer_id = u.user_id
+    WHERE pr.referred_time BETWEEN %s AND %s
+    GROUP BY pr.referrer_id, u.username, u.first_name
+    ORDER BY ref_count DESC
+    LIMIT 5
+    """, (PROMO_START, PROMO_END))
+    
+    top_referrers = cursor.fetchall()
+    conn.close()
+    
+    if not top_referrers:
+        await update.message.reply_text(
+            "🏆 *Free ₦10,000 Reward Contest*\n\n"
+            "No referrals yet! Be the first to refer and win ₦10,000!\n\n"
+            f"Contest ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
+            "The user with the most referrals during this 24-hour period will win ₦10,000!",
+            parse_mode="Markdown"
+        )
+        return
+    
+    message = "🏆 *Free ₦10,000 Reward Contest*\n\n"
+    message += "Current Top 5 Referrers:\n\n"
+    
+    for i, (ref_id, count, username, first_name) in enumerate(top_referrers, 1):
+        display_name = f"@{username}" if username else first_name
+        message += f"{i}. {display_name}: {count} referrals\n"
+    
+    time_left = PROMO_END - now
+    hours, remainder = divmod(time_left.seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+    
+    message += f"\n⏱ Time remaining: {hours}h {minutes}m\n\n"
+    message += "Keep referring to win ₦10,000!"
+    
+    await update.message.reply_text(message, parse_mode="Markdown")
+
 
 # Show user balance
 @subscription_required
@@ -571,9 +729,9 @@ async def handle_withdrawal_callback(update: Update, context: ContextTypes.DEFAU
         nigeria_tz = pytz.timezone('Africa/Lagos')
         current_time = datetime.now(nigeria_tz)
 
-        if not (18 <= current_time.hour < 20):
+        if not (18 <= current_time.hour < 19):
             await query.answer(
-                "🕒 Withdrawals are only available from 6 PM to 8 PM daily.\n\n"
+                "🕒 Withdrawals are only available from 6 PM to 7 PM daily.\n\n"
                 "Keep referring to increase your earnings!",
                 show_alert=True
             )
@@ -642,9 +800,9 @@ async def process_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE,
     nigeria_tz = pytz.timezone('Africa/Lagos')
     current_time = datetime.now(nigeria_tz)
 
-    if not (18 <= current_time.hour < 20):
+    if not (18 <= current_time.hour < 19):
             await query.answer(
-                "🕒 Withdrawals are only available from 6 PM to 8 PM daily.\n\n"
+                "🕒 Withdrawals are only available from 6 PM to 7 PM daily.\n\n"
                 "Keep referring to increase your earnings!",
                 show_alert=True
             )
@@ -742,9 +900,9 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_time = datetime.now(nigeria_tz)
 
 # Check if current time is between 6 PM (18:00) and 8 PM (20:00)
-        if not (18 <= current_time.hour < 20):
+        if not (18 <= current_time.hour < 19):
             await update.message.reply_text(
-                "🕒 Withdrawals are only available from 6 PM to 8 PM daily.\n\n"
+                "🕒 Withdrawals are only available from 6 PM to 7 PM daily.\n\n"
                 "Keep referring to increase your earnings!"
             )
             return
