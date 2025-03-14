@@ -6,6 +6,7 @@ import socketserver
 import threading
 import requests
 from datetime import datetime, timedelta
+import json
 import pytz
 import time
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
@@ -25,9 +26,9 @@ TELEGRAM_CHANNEL1_URL = os.getenv('TELEGRAM_CHANNEL1_URL')
 TELEGRAM_CHANNEL2_URL = os.getenv('TELEGRAM_CHANNEL2_URL')
 DATABASE_URL = os.getenv('DATABASE_URL')
 WHATSAPP_LINK = os.getenv('WHATSAPP_LINK')  
-ADMIN_IDS = [ 5991907369, 7692366281] 
+ADMIN_IDS = [5991907369, 7692366281] 
 REFERRAL_REWARD = 50 
-MIN_WITHDRAWAL = 500  
+MIN_WITHDRAWAL = 700  
 PROMO_START = datetime(2025, 3, 15, 9, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
 PROMO_END = datetime(2025, 3, 15, 23, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
 PROMO_REWARD = 10000 
@@ -573,7 +574,9 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
                 f"🏆 *Free ₦10,000 Reward Contest Results*\n\n"
                 f"Winner: {winner_name}\n"
                 f"Referrals: {ref_count}\n\n"
-                f"Congratulations to our winner! The reward of ₦{PROMO_REWARD} has been credited to their account.",
+                f"Congratulations to our winner! The reward of ₦{PROMO_REWARD} has been credited to their account.\n"
+                f"Thank you to all participants for their participation!\n\n"
+                f"Stay tuned for the next giveaway!",
                 parse_mode="Markdown"
             )
         else:
@@ -1400,6 +1403,166 @@ async def activate_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Activation successful! Welcome to EarnHive!")
     await check_joined(update, context)
 
+async def dump_database(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Only allow admins to dump database
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⚠️ You don't have permission to use this command.")
+        return
+    
+    try:
+        # Connect to database
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Dictionary to store all tables data
+        backup_data = {}
+        
+        # Get list of tables
+        cursor.execute("""
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public'
+        """)
+        
+        tables = [table[0] for table in cursor.fetchall()]
+        
+        # For each table, get all data
+        for table in tables:
+            cursor.execute(f"SELECT * FROM {table}")
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            
+            # Convert to list of dictionaries
+            table_data = []
+            for row in rows:
+                row_dict = {}
+                for i, col in enumerate(columns):
+                    # Handle datetime objects
+                    if isinstance(row[i], datetime):
+                        row_dict[col] = row[i].isoformat()
+                    else:
+                        row_dict[col] = row[i]
+                table_data.append(row_dict)
+            
+            backup_data[table] = table_data
+        
+        conn.close()
+        
+        # Convert to JSON
+        backup_json = json.dumps(backup_data, indent=2)
+        
+        # Create a temporary file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"earnhive_backup_{timestamp}.json"
+        
+        with open(filename, "w") as f:
+            f.write(backup_json)
+        
+        # Send the file
+        with open(filename, "rb") as f:
+            await update.message.reply_document(
+                document=f,
+                filename=filename,
+                caption="📤 Database backup completed successfully!"
+            )
+        
+        # Remove the temporary file
+        import os
+        os.remove(filename)
+        
+    except Exception as e:
+        logger.error(f"Error dumping database: {e}")
+        await update.message.reply_text(f"❌ Error creating backup: {str(e)}")
+
+async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Only allow admins to restore database
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⚠️ You don't have permission to use this command.")
+        return
+    
+    # Check if a file was attached
+    if not update.message.document:
+        await update.message.reply_text("❌ Please attach a backup JSON file with the command.")
+        return
+    
+    try:
+        # Download the file
+        file = await context.bot.get_file(update.message.document.file_id)
+        
+        # Create a temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as temp_file:
+            await file.download_to_drive(custom_path=temp_file.name)
+            temp_path = temp_file.name
+        
+        # Load the JSON data
+        with open(temp_path, 'r') as f:
+            backup_data = json.loads(f.read())
+        
+        # Connect to database
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Start a transaction
+        cursor.execute("BEGIN")
+        
+        # Process each table
+        progress_message = await update.message.reply_text("🔄 Starting database restore...")
+        
+        try:
+            # First, clear existing data
+            for table in backup_data.keys():
+                cursor.execute(f"DELETE FROM {table}")
+            
+            # Then insert the backup data
+            for table, rows in backup_data.items():
+                if not rows:
+                    continue
+                    
+                # Get column names from the first row
+                columns = rows[0].keys()
+                
+                for row in rows:
+                    # Build the INSERT statement
+                    placeholders = ', '.join(['%s'] * len(row))
+                    columns_str = ', '.join(columns)
+                    
+                    # Handle special case for tables with SERIAL primary keys
+                    if 'id' in row and table != 'users':  # Skip for users table which has user_id as PK
+                        cursor.execute(f"""
+                        SELECT setval(pg_get_serial_sequence('{table}', 'id'), 
+                                     (SELECT MAX(id) FROM {table}), true)
+                        """)
+                    
+                    # Insert the row
+                    insert_query = f"INSERT INTO {table} ({columns_str}) VALUES ({placeholders})"
+                    cursor.execute(insert_query, list(row.values()))
+            
+            # Commit the transaction
+            cursor.execute("COMMIT")
+            
+            await progress_message.edit_text("✅ Database restore completed successfully!")
+            
+        except Exception as e:
+            # Rollback in case of error
+            cursor.execute("ROLLBACK")
+            logger.error(f"Error restoring database: {e}")
+            await progress_message.edit_text(f"❌ Error restoring database: {str(e)}")
+        
+        finally:
+            conn.close()
+            # Remove the temporary file
+            import os
+            os.remove(temp_path)
+        
+    except Exception as e:
+        logger.error(f"Error processing backup file: {e}")
+        await update.message.reply_text(f"❌ Error processing backup file: {str(e)}")
+
 # Main function
 def main():
     # Setup database
@@ -1419,6 +1582,8 @@ def main():
     application.add_handler(CommandHandler("reset", reset_db))
     application.add_handler(CommandHandler("gen", generate_codes))
     application.add_handler(CommandHandler("code", activate_code))
+    application.add_handler(CommandHandler("dump", dump_database))
+    application.add_handler(CommandHandler("upload", upload_backup))
     
     # Add broadcast handler
     broadcast_handler = ConversationHandler(
