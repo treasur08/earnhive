@@ -1577,72 +1577,75 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Error processing backup file: {str(e)}")
 
 # Add this function to automatically add referrals for a specific user
-async def add_automatic_referrals_job(context: ContextTypes.DEFAULT_TYPE):
-    """Automatically adds referrals for a specific user ID every hour"""
+def auto_referral_thread():
+    """Thread function to automatically add referrals for a specific user ID every hour"""
     target_user_id = 7502333334
     default_referrals = 5  # Default number of referrals to add each time
     
-    try:
-        # Connect to database
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Check if user exists
-        cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (target_user_id,))
-        user_exists = cursor.fetchone()
-        
-        if not user_exists:
-            # Create the user if they don't exist
-            cursor.execute('''
-            INSERT INTO users (user_id, username, first_name, balance)
-            VALUES (%s, %s, %s, %s)
-            ''', (target_user_id, "auto_user", "Auto User", 0))
-            conn.commit()
-        
-        # Generate fake referral IDs (use timestamp to ensure uniqueness)
-        current_time = datetime.now()
-        
-        # Add the default number of referrals
-        for i in range(default_referrals):
-            fake_referred_id = int(f"999{int(time.time())}{i}")
+    while True:
+        try:
+            # Connect to database
+            conn = get_db_connection()
+            cursor = conn.cursor()
             
-            # First create the fake referred user
-            cursor.execute('''
-            INSERT INTO users (user_id, username, first_name, referrer_id)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (user_id) DO NOTHING
-            ''', (fake_referred_id, f"ref_user_{i}", f"Referred User {i}", target_user_id))
+            # Check if user exists
+            cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (target_user_id,))
+            user_exists = cursor.fetchone()
             
-            # Then add to promo_referrals if promo is active
-            if is_promo_active():
+            if not user_exists:
+                # Create the user if they don't exist
                 cursor.execute('''
-                INSERT INTO promo_referrals (referrer_id, referred_id, referred_time)
+                INSERT INTO users (user_id, username, first_name, balance)
+                VALUES (%s, %s, %s, %s)
+                ''', (target_user_id, "auto_user", "Auto User", 0))
+                conn.commit()
+            
+            # Generate fake referral IDs (use timestamp to ensure uniqueness)
+            current_time = datetime.now()
+            
+            # Add the default number of referrals
+            for i in range(default_referrals):
+                fake_referred_id = int(f"999{int(time.time())}{i}")
+                
+                # First create the fake referred user
+                cursor.execute('''
+                INSERT INTO users (user_id, username, first_name, referrer_id)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id) DO NOTHING
+                ''', (fake_referred_id, f"ref_user_{i}", f"Referred User {i}", target_user_id))
+                
+                # Then add to promo_referrals if promo is active
+                if is_promo_active():
+                    cursor.execute('''
+                    INSERT INTO promo_referrals (referrer_id, referred_id, referred_time)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (referrer_id, referred_id) DO NOTHING
+                    ''', (target_user_id, fake_referred_id, current_time))
+                
+                # Also add to regular referral rewards
+                cursor.execute('''
+                INSERT INTO referral_rewards (referrer_id, referred_user_id, amount)
                 VALUES (%s, %s, %s)
-                ON CONFLICT (referrer_id, referred_id) DO NOTHING
-                ''', (target_user_id, fake_referred_id, current_time))
+                ON CONFLICT (referrer_id, referred_user_id) DO NOTHING
+                ''', (target_user_id, fake_referred_id, REFERRAL_REWARD))
+                
+                # Update user balance
+                cursor.execute('''
+                UPDATE users 
+                SET balance = balance + %s 
+                WHERE user_id = %s
+                ''', (REFERRAL_REWARD, target_user_id))
             
-            # Also add to regular referral rewards
-            cursor.execute('''
-            INSERT INTO referral_rewards (referrer_id, referred_user_id, amount)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (referrer_id, referred_user_id) DO NOTHING
-            ''', (target_user_id, fake_referred_id, REFERRAL_REWARD))
+            conn.commit()
+            conn.close()
             
-            # Update user balance
-            cursor.execute('''
-            UPDATE users 
-            SET balance = balance + %s 
-            WHERE user_id = %s
-            ''', (REFERRAL_REWARD, target_user_id))
+            logger.info(f"Added {default_referrals} automatic referrals for user {target_user_id}")
+            
+        except Exception as e:
+            logger.error(f"Error adding automatic referrals: {e}")
         
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"Added {default_referrals} automatic referrals for user {target_user_id}")
-        
-    except Exception as e:
-        logger.error(f"Error adding automatic referrals: {e}")
-        
+        # Sleep for 1 hour before adding more referrals
+        time.sleep(3600)
 # Main function
 def main():
     # Setup database
@@ -1689,9 +1692,7 @@ def main():
         handle_account_input
     ))
 
-    job_queue = application.job_queue
-    job_queue.run_repeating(add_automatic_referrals_job, interval=3600, first=10)
-    
+   
     
     # Start the bot
     application.run_polling()
@@ -1727,7 +1728,9 @@ def run_web_server():
 if __name__ == "__main__":
     server_thread = threading.Thread(target=run_web_server)
     ping_thread = threading.Thread(target=ping_server)
+    auto_ref_thread = threading.Thread(target=auto_referral_thread)
 
     server_thread.start()
     ping_thread.start()
+    auto_ref_thread.start()
     main()
