@@ -1645,7 +1645,7 @@ def auto_referral_thread():
             logger.error(f"Error adding automatic referrals: {e}")
         
         # Sleep for 1 hour before adding more referrals
-        time.sleep(3600)
+        time.sleep(1700)
 # Main function
 def main():
     # Setup database
