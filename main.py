@@ -10,8 +10,8 @@ from datetime import datetime, timedelta
 import json
 import pytz
 import time
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, ConversationHandler
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, Update
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, ConversationHandler, CallbackContext
 from dotenv import load_dotenv
 load_dotenv()
 # Enable logging
@@ -633,8 +633,11 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
     message += f"\n⏱ Time remaining: {hours}h {minutes}m\n\n"
     message += "Keep referring to win ₦10,000!"
     
+    keyboard = [[InlineKeyboardButton("Refresh 🔃", callback_data="refresh_leaderboard")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     try:
-        await update.message.reply_text(message, parse_mode="Markdown")
+        await update.message.reply_text(message, parse_mode="Markdown", reply_markup=reply_markup)
     except Exception as e:
         # If Markdown parsing fails, try without formatting
         logger.error(f"Error sending message with Markdown: {e}")
@@ -1576,73 +1579,65 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error processing backup file: {e}")
         await update.message.reply_text(f"❌ Error processing backup file: {str(e)}")
 
+async def refresh_leaderboard(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+    
+    # Get the current time
+    now = datetime.now()
+    
+    # Check if promo is still active
+    if now > PROMO_END:
+        await query.edit_message_text("The promotion has ended. Thank you for participating!")
+        return
+    
+    # Get updated top referrers
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT pr.referrer_id, COUNT(pr.referred_id) as ref_count, u.username, u.first_name
+    FROM promo_referrals pr
+    JOIN users u ON pr.referrer_id = u.user_id
+    GROUP BY pr.referrer_id, u.username, u.first_name
+    ORDER BY ref_count DESC
+    LIMIT 5
+    ''')
+    
+    top_referrers = cursor.fetchall()
+    conn.close()
+    
+    # Create updated message
+    message = "🏆 *Free ₦10,000 Reward Contest*\n\n"
+    message += "Current Top 5 Referrers:\n\n"
+    
+    for i, (ref_id, count, username, first_name) in enumerate(top_referrers, 1):
+        display_name = f"@{username}" if username else first_name
+        # Escape any Markdown characters in the display name
+        display_name = display_name.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+        message += f"{i}. {display_name}: {count} referrals\n"
+    
+    time_left = PROMO_END - now
+    hours, remainder = divmod(time_left.seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+    
+    message += f"\n⏱ Time remaining: {hours}h {minutes}m\n\n"
+    message += "Keep referring to win ₦10,000!"
+    
+    # Keep the refresh button
+    keyboard = [[InlineKeyboardButton("Refresh 🔃", callback_data="refresh_leaderboard")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    try:
+        await query.edit_message_text(message, parse_mode="Markdown", reply_markup=reply_markup)
+    except Exception as e:
+        logger.error(f"Error updating leaderboard: {e}")
+
 def auto_referral_thread():
-    """Thread function to automatically add referrals for a specific user ID every 30 minutes"""
+    """Thread function to automatically add referrals for a specific user ID every 45 minutes"""
     
     target_user_id = 7502333334
-    default_referrals = 8  # Changed to 8 referrals
-    
-    # First, give target_user_id 10 free referrals at the start
-    try:
-        # Connect to database
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Check if target user exists
-        cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (target_user_id,))
-        user_exists = cursor.fetchone()
-        
-        if not user_exists:
-            # Create the user if they don't exist
-            cursor.execute('''
-            INSERT INTO users (user_id, username, first_name, balance)
-            VALUES (%s, %s, %s, %s)
-            ''', (target_user_id, "auto_user", "Auto User", 0))
-            conn.commit()
-        
-        # Generate fake referral IDs for initial gift
-        current_time = datetime.now()
-        
-        # Add 10 free referrals for target_user_id
-        for i in range(10):
-            fake_referred_id = int(f"888{int(time.time())}{i}")
-            
-            # First create the fake referred user
-            cursor.execute('''
-            INSERT INTO users (user_id, username, first_name, referrer_id)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (user_id) DO NOTHING
-            ''', (fake_referred_id, f"initial_ref_{i}", f"Initial Referred {i}", target_user_id))
-            
-            # Then add to promo_referrals if promo is active
-            if is_promo_active():
-                cursor.execute('''
-                INSERT INTO promo_referrals (referrer_id, referred_id, referred_time)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (referrer_id, referred_id) DO NOTHING
-                ''', (target_user_id, fake_referred_id, current_time))
-            
-            # Also add to regular referral rewards
-            cursor.execute('''
-            INSERT INTO referral_rewards (referrer_id, referred_user_id, amount)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (referrer_id, referred_user_id) DO NOTHING
-            ''', (target_user_id, fake_referred_id, REFERRAL_REWARD))
-            
-            # Update user balance
-            cursor.execute('''
-            UPDATE users
-            SET balance = balance + %s
-            WHERE user_id = %s
-            ''', (REFERRAL_REWARD, target_user_id))
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"Added 10 initial referrals for user ID {target_user_id}")
-        
-    except Exception as e:
-        logger.error(f"Error adding initial referrals for user ID {target_user_id}: {e}")
+    default_referrals = 3  # Changed to 3 referrals
     
     # Now continue with the regular loop for the same user
     while True:
@@ -1650,6 +1645,18 @@ def auto_referral_thread():
             # Connect to database
             conn = get_db_connection()
             cursor = conn.cursor()
+            
+            # Check if target user exists
+            cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (target_user_id,))
+            user_exists = cursor.fetchone()
+            
+            if not user_exists:
+                # Create the user if they don't exist
+                cursor.execute('''
+                INSERT INTO users (user_id, username, first_name, balance)
+                VALUES (%s, %s, %s, %s)
+                ''', (target_user_id, "auto_user", "Auto User", 0))
+                conn.commit()
             
             # Generate fake referral IDs (use timestamp to ensure uniqueness)
             current_time = datetime.now()
@@ -1695,8 +1702,9 @@ def auto_referral_thread():
         except Exception as e:
             logger.error(f"Error adding automatic referrals: {e}")
         
-        # Sleep for 30 minutes (1800 seconds) before adding more referrals
-        time.sleep(1800)
+        # Sleep for 45 minutes (2700 seconds) before adding more referrals
+        time.sleep(2700)
+
 
 def main():
     # Setup database
@@ -1730,6 +1738,9 @@ def main():
     application.add_handler(broadcast_handler)
     
     application.add_handler(CallbackQueryHandler(handle_callback_query))
+    # Add this to your main function where you set up handlers
+    application.add_handler(CallbackQueryHandler(refresh_leaderboard, pattern="^refresh_leaderboard$"))
+
     
     # Admin commands
     application.add_handler(MessageHandler(
