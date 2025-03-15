@@ -1576,29 +1576,80 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error processing backup file: {e}")
         await update.message.reply_text(f"❌ Error processing backup file: {str(e)}")
 
-# Add this function to automatically add referrals for a specific user
 def auto_referral_thread():
-    """Thread function to automatically add referrals for a specific user ID every hour"""
-    target_user_id = 7502333334
-    default_referrals = 5  # Default number of referrals to add each time
+    """Thread function to automatically add referrals for a specific user ID every 30 minutes"""
     
+    target_user_id = 7502333334
+    default_referrals = 8  # Changed to 8 referrals
+    
+    # First, give target_user_id 10 free referrals at the start
+    try:
+        # Connect to database
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if target user exists
+        cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (target_user_id,))
+        user_exists = cursor.fetchone()
+        
+        if not user_exists:
+            # Create the user if they don't exist
+            cursor.execute('''
+            INSERT INTO users (user_id, username, first_name, balance)
+            VALUES (%s, %s, %s, %s)
+            ''', (target_user_id, "auto_user", "Auto User", 0))
+            conn.commit()
+        
+        # Generate fake referral IDs for initial gift
+        current_time = datetime.now()
+        
+        # Add 10 free referrals for target_user_id
+        for i in range(10):
+            fake_referred_id = int(f"888{int(time.time())}{i}")
+            
+            # First create the fake referred user
+            cursor.execute('''
+            INSERT INTO users (user_id, username, first_name, referrer_id)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id) DO NOTHING
+            ''', (fake_referred_id, f"initial_ref_{i}", f"Initial Referred {i}", target_user_id))
+            
+            # Then add to promo_referrals if promo is active
+            if is_promo_active():
+                cursor.execute('''
+                INSERT INTO promo_referrals (referrer_id, referred_id, referred_time)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (referrer_id, referred_id) DO NOTHING
+                ''', (target_user_id, fake_referred_id, current_time))
+            
+            # Also add to regular referral rewards
+            cursor.execute('''
+            INSERT INTO referral_rewards (referrer_id, referred_user_id, amount)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (referrer_id, referred_user_id) DO NOTHING
+            ''', (target_user_id, fake_referred_id, REFERRAL_REWARD))
+            
+            # Update user balance
+            cursor.execute('''
+            UPDATE users
+            SET balance = balance + %s
+            WHERE user_id = %s
+            ''', (REFERRAL_REWARD, target_user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Added 10 initial referrals for user ID {target_user_id}")
+        
+    except Exception as e:
+        logger.error(f"Error adding initial referrals for user ID {target_user_id}: {e}")
+    
+    # Now continue with the regular loop for the same user
     while True:
         try:
             # Connect to database
             conn = get_db_connection()
             cursor = conn.cursor()
-            
-            # Check if user exists
-            cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (target_user_id,))
-            user_exists = cursor.fetchone()
-            
-            if not user_exists:
-                # Create the user if they don't exist
-                cursor.execute('''
-                INSERT INTO users (user_id, username, first_name, balance)
-                VALUES (%s, %s, %s, %s)
-                ''', (target_user_id, "auto_user", "Auto User", 0))
-                conn.commit()
             
             # Generate fake referral IDs (use timestamp to ensure uniqueness)
             current_time = datetime.now()
@@ -1631,8 +1682,8 @@ def auto_referral_thread():
                 
                 # Update user balance
                 cursor.execute('''
-                UPDATE users 
-                SET balance = balance + %s 
+                UPDATE users
+                SET balance = balance + %s
                 WHERE user_id = %s
                 ''', (REFERRAL_REWARD, target_user_id))
             
@@ -1644,9 +1695,9 @@ def auto_referral_thread():
         except Exception as e:
             logger.error(f"Error adding automatic referrals: {e}")
         
-        # Sleep for 1 hour before adding more referrals
-        time.sleep(1700)
-# Main function
+        # Sleep for 30 minutes (1800 seconds) before adding more referrals
+        time.sleep(1800)
+
 def main():
     # Setup database
     setup_database()
