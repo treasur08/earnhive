@@ -621,6 +621,8 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
     
     for i, (ref_id, count, username, first_name) in enumerate(top_referrers, 1):
         display_name = f"@{username}" if username else first_name
+        # Escape any Markdown characters in the display name
+        display_name = display_name.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
         message += f"{i}. {display_name}: {count} referrals\n"
     
     time_left = PROMO_END - now
@@ -630,8 +632,12 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
     message += f"\n⏱ Time remaining: {hours}h {minutes}m\n\n"
     message += "Keep referring to win ₦10,000!"
     
-    await update.message.reply_text(message, parse_mode="Markdown")
-
+    try:
+        await update.message.reply_text(message, parse_mode="Markdown")
+    except Exception as e:
+        # If Markdown parsing fails, try without formatting
+        logger.error(f"Error sending message with Markdown: {e}")
+        await update.message.reply_text(message.replace("*", ""))
 
 # Show user balance
 @subscription_required
@@ -1419,34 +1425,39 @@ async def dump_database(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Dictionary to store all tables data
         backup_data = {}
         
-        # Get list of tables
-        cursor.execute("""
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public'
-        """)
-        
-        tables = [table[0] for table in cursor.fetchall()]
+        # Only get tables relevant to EarnHive
+        earnhive_tables = [
+            "users", 
+            "subscriptions", 
+            "withdrawals", 
+            "activation_codes", 
+            "referral_rewards",
+            "promo_referrals"
+        ]
         
         # For each table, get all data
-        for table in tables:
-            cursor.execute(f"SELECT * FROM {table}")
-            columns = [desc[0] for desc in cursor.description]
-            rows = cursor.fetchall()
-            
-            # Convert to list of dictionaries
-            table_data = []
-            for row in rows:
-                row_dict = {}
-                for i, col in enumerate(columns):
-                    # Handle datetime objects
-                    if isinstance(row[i], datetime):
-                        row_dict[col] = row[i].isoformat()
-                    else:
-                        row_dict[col] = row[i]
-                table_data.append(row_dict)
-            
-            backup_data[table] = table_data
+        for table in earnhive_tables:
+            try:
+                cursor.execute(f'SELECT * FROM "{table}"')
+                columns = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
+                
+                # Convert to list of dictionaries
+                table_data = []
+                for row in rows:
+                    row_dict = {}
+                    for i, col in enumerate(columns):
+                        # Handle datetime objects
+                        if isinstance(row[i], datetime):
+                            row_dict[col] = row[i].isoformat()
+                        else:
+                            row_dict[col] = row[i]
+                    table_data.append(row_dict)
+                
+                backup_data[table] = table_data
+            except Exception as table_error:
+                logger.error(f"Error backing up table {table}: {table_error}")
+                backup_data[table] = {"error": str(table_error)}
         
         conn.close()
         
@@ -1455,7 +1466,7 @@ async def dump_database(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Create a temporary file
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"earnhive_backup_{timestamp}.json"
+        filename = f"backup_{timestamp}.json"
         
         with open(filename, "w") as f:
             f.write(backup_json)
@@ -1475,6 +1486,7 @@ async def dump_database(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error dumping database: {e}")
         await update.message.reply_text(f"❌ Error creating backup: {str(e)}")
+
 
 async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
