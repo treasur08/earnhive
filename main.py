@@ -1671,9 +1671,16 @@ async def refresh_leaderboard(update: Update, context: CallbackContext):
 
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get ID of a chat, channel, or user"""
-    # If command is used in a channel or group
+    # If there's no message (can happen in channels), use callback query
+    if not update.effective_message:
+        logger.error("No effective message in update")
+        return
+        
     chat = update.effective_chat
     message = update.effective_message
+    
+    # Debug logging
+    logger.info(f"get_id called in chat type: {chat.type}, chat id: {chat.id}")
     
     # Check if a user is mentioned or replied to
     if message.reply_to_message:
@@ -1700,12 +1707,31 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     
     # If no specific target, return the current chat ID
-    if chat.type in ["group", "supergroup", "channel"]:
-        await message.reply_text(f"Chat/Channel ID: `{chat.id}`", parse_mode="Markdown")
-    else:
-        # In private chat, return user's ID
-        await message.reply_text(f"Your User ID: `{update.effective_user.id}`", parse_mode="Markdown")
-
+    try:
+        if chat.type == "channel":
+            # For channels, we need to send a message to the channel
+            await context.bot.send_message(
+                chat_id=chat.id,
+                text=f"Channel ID: `{chat.id}`",
+                parse_mode="Markdown"
+            )
+        elif chat.type in ["group", "supergroup"]:
+            await message.reply_text(f"Chat ID: `{chat.id}`", parse_mode="Markdown")
+        else:
+            # In private chat, return user's ID
+            await message.reply_text(f"Your User ID: `{update.effective_user.id}`", parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"Error sending ID message: {e}")
+        # Try sending a direct message to the user if possible
+        if update.effective_user:
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_user.id,
+                    text=f"Chat/Channel ID: `{chat.id}`\n\nI couldn't send this message in the chat/channel, possibly due to permission issues.",
+                    parse_mode="Markdown"
+                )
+            except Exception as inner_e:
+                logger.error(f"Error sending direct message: {inner_e}")
 
 def auto_referral_thread():
     """Thread function to automatically add referrals for a specific user ID every 45 minutes"""
