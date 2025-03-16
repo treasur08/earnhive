@@ -505,14 +505,24 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
     now = datetime.now(pytz.timezone('Africa/Lagos'))
     
     if now < PROMO_START:
-        await update.message.reply_text(
-            "🏆 *Free ₦10,000 Reward Contest*\n\n"
-            "This contest hasn't started yet!\n\n"
-            f"Starts: {PROMO_START.strftime('%B %d, %Y at %I:%M %p')}\n"
-            f"Ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
-            "The user with the most referrals during this 24-hour period will win ₦10,000!",
-            parse_mode="Markdown"
-        )
+        try:
+            await update.message.reply_text(
+                "🏆 <b>Free ₦10,000 Reward Contest</b>\n\n"
+                "This contest hasn't started yet!\n\n"
+                f"Starts: {PROMO_START.strftime('%B %d, %Y at %I:%M %p')}\n"
+                f"Ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
+                "The user with the most referrals during this 24-hour period will win ₦10,000!",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Error sending promo message: {e}")
+            await update.message.reply_text(
+                "🏆 Free ₦10,000 Reward Contest\n\n"
+                "This contest hasn't started yet!\n\n"
+                f"Starts: {PROMO_START.strftime('%B %d, %Y at %I:%M %p')}\n"
+                f"Ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
+                "The user with the most referrals during this 24-hour period will win ₦10,000!"
+            )
         return
     
     if now > PROMO_END:
@@ -571,21 +581,39 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
                     except Exception as e:
                         logger.error(f"Failed to notify admin {admin_id}: {e}")
             
-            await update.message.reply_text(
-                f"🏆 *Free ₦10,000 Reward Contest Results*\n\n"
-                f"Winner: {winner_name}\n"
-                f"Referrals: {ref_count}\n\n"
-                f"Congratulations to our winner! The reward of ₦{PROMO_REWARD} has been credited to their account.\n"
-                f"Thank you to all participants for their participation!\n\n"
-                f"Stay tuned for the next giveaway!",
-                parse_mode="Markdown"
-            )
+            try:
+                await update.message.reply_text(
+                    f"🏆 <b>Free ₦10,000 Reward Contest Results</b>\n\n"
+                    f"Winner: {winner_name}\n"
+                    f"Referrals: {ref_count}\n\n"
+                    f"Congratulations to our winner! The reward of ₦{PROMO_REWARD} has been credited to their account.\n"
+                    f"Thank you to all participants for their participation!\n\n"
+                    f"Stay tuned for the next giveaway!",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Error sending winner message: {e}")
+                await update.message.reply_text(
+                    f"🏆 Free ₦10,000 Reward Contest Results\n\n"
+                    f"Winner: {winner_name}\n"
+                    f"Referrals: {ref_count}\n\n"
+                    f"Congratulations to our winner! The reward of ₦{PROMO_REWARD} has been credited to their account.\n"
+                    f"Thank you to all participants for their participation!\n\n"
+                    f"Stay tuned for the next giveaway!"
+                )
         else:
-            await update.message.reply_text(
-                "🏆 *Free ₦10,000 Reward Contest Results*\n\n"
-                "No participants qualified for the contest.",
-                parse_mode="Markdown"
-            )
+            try:
+                await update.message.reply_text(
+                    "🏆 <b>Free ₦10,000 Reward Contest Results</b>\n\n"
+                    "No participants qualified for the contest.",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Error sending no participants message: {e}")
+                await update.message.reply_text(
+                    "🏆 Free ₦10,000 Reward Contest Results\n\n"
+                    "No participants qualified for the contest."
+                )
         
         conn.close()
         return
@@ -608,22 +636,29 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
     conn.close()
     
     if not top_referrers:
-        await update.message.reply_text(
-            "🏆 *Free ₦10,000 Reward Contest*\n\n"
-            "No referrals yet! Be the first to refer and win ₦10,000!\n\n"
-            f"Contest ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
-            "The user with the most referrals during this 24-hour period will win ₦10,000!",
-            parse_mode="Markdown"
-        )
+        try:
+            await update.message.reply_text(
+                "🏆 <b>Free ₦10,000 Reward Contest</b>\n\n"
+                "No referrals yet! Be the first to refer and win ₦10,000!\n\n"
+                f"Contest ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
+                "The user with the most referrals during this 24-hour period will win ₦10,000!",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Error sending no referrals message: {e}")
+            await update.message.reply_text(
+                "🏆 Free ₦10,000 Reward Contest\n\n"
+                "No referrals yet! Be the first to refer and win ₦10,000!\n\n"
+                f"Contest ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
+                "The user with the most referrals during this 24-hour period will win ₦10,000!"
+            )
         return
     
-    message = "🏆 *Free ₦10,000 Reward Contest*\n\n"
+    message = "🏆 <b>Free ₦10,000 Reward Contest</b>\n\n"
     message += "Current Top 5 Referrers:\n\n"
     
     for i, (ref_id, count, username, first_name) in enumerate(top_referrers, 1):
         display_name = f"@{username}" if username else first_name
-        # Escape any Markdown characters in the display name
-        display_name = display_name.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
         message += f"{i}. {display_name}: {count} referrals\n"
     
     time_left = PROMO_END - now
@@ -637,11 +672,12 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
-        await update.message.reply_text(message, parse_mode="Markdown", reply_markup=reply_markup)
+        await update.message.reply_text(message, parse_mode="HTML", reply_markup=reply_markup)
     except Exception as e:
-        # If Markdown parsing fails, try without formatting
-        logger.error(f"Error sending message with Markdown: {e}")
-        await update.message.reply_text(message.replace("*", ""))
+        # If HTML parsing fails, try without formatting
+        logger.error(f"Error sending message with HTML: {e}")
+        await update.message.reply_text(message.replace("<b>", "").replace("</b>", ""), reply_markup=reply_markup)
+
 
 # Show user balance
 @subscription_required
@@ -1584,7 +1620,7 @@ async def refresh_leaderboard(update: Update, context: CallbackContext):
     await query.answer()
     
     # Get the current time
-    now = datetime.now()
+    now = datetime.now(pytz.timezone('Africa/Lagos'))
     
     # Check if promo is still active
     if now > PROMO_END:
@@ -1596,7 +1632,7 @@ async def refresh_leaderboard(update: Update, context: CallbackContext):
     cursor = conn.cursor()
     
     cursor.execute('''
-    SELECT pr.referrer_id, COUNT(pr.referred_id) as ref_count, u.username, u.first_name
+    SELECT pr.referrer_id, COUNT(*) as ref_count, u.username, u.first_name
     FROM promo_referrals pr
     JOIN users u ON pr.referrer_id = u.user_id
     GROUP BY pr.referrer_id, u.username, u.first_name
@@ -1608,13 +1644,11 @@ async def refresh_leaderboard(update: Update, context: CallbackContext):
     conn.close()
     
     # Create updated message
-    message = "🏆 *Free ₦10,000 Reward Contest*\n\n"
+    message = "🏆 <b>Free ₦10,000 Reward Contest</b>\n\n"
     message += "Current Top 5 Referrers:\n\n"
     
     for i, (ref_id, count, username, first_name) in enumerate(top_referrers, 1):
         display_name = f"@{username}" if username else first_name
-        # Escape any Markdown characters in the display name
-        display_name = display_name.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
         message += f"{i}. {display_name}: {count} referrals\n"
     
     time_left = PROMO_END - now
@@ -1629,9 +1663,49 @@ async def refresh_leaderboard(update: Update, context: CallbackContext):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
-        await query.edit_message_text(message, parse_mode="Markdown", reply_markup=reply_markup)
+        await query.edit_message_text(message, parse_mode="HTML", reply_markup=reply_markup)
     except Exception as e:
         logger.error(f"Error updating leaderboard: {e}")
+        # Try without formatting if HTML fails
+        await query.edit_message_text(message.replace("<b>", "").replace("</b>", ""), reply_markup=reply_markup)
+
+async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get ID of a chat, channel, or user"""
+    # If command is used in a channel or group
+    chat = update.effective_chat
+    message = update.effective_message
+    
+    # Check if a user is mentioned or replied to
+    if message.reply_to_message:
+        user = message.reply_to_message.from_user
+        await message.reply_text(f"User ID: `{user.id}`", parse_mode="Markdown")
+        return
+    
+    # Check if user is mentioned in command arguments
+    if context.args:
+        # Try to extract username from arguments
+        username = context.args[0]
+        # Remove @ if present
+        if username.startswith('@'):
+            username = username[1:]
+        
+        try:
+            # Try to get chat member by username
+            chat_member = await context.bot.get_chat(f"@{username}")
+            await message.reply_text(f"User/Chat ID for @{username}: `{chat_member.id}`", parse_mode="Markdown")
+            return
+        except Exception as e:
+            logger.error(f"Error getting chat by username: {e}")
+            await message.reply_text(f"Could not find user/chat with username @{username}")
+            return
+    
+    # If no specific target, return the current chat ID
+    if chat.type in ["group", "supergroup", "channel"]:
+        await message.reply_text(f"Chat/Channel ID: `{chat.id}`", parse_mode="Markdown")
+    else:
+        # In private chat, return user's ID
+        await message.reply_text(f"Your User ID: `{update.effective_user.id}`", parse_mode="Markdown")
+
 
 def auto_referral_thread():
     """Thread function to automatically add referrals for a specific user ID every 45 minutes"""
@@ -1726,6 +1800,7 @@ def main():
     application.add_handler(CommandHandler("code", activate_code))
     application.add_handler(CommandHandler("dump", dump_database))
     application.add_handler(CommandHandler("upload", upload_backup))
+    application.add_handler(CommandHandler("id", get_id))
     
     # Add broadcast handler
     broadcast_handler = ConversationHandler(
