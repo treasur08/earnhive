@@ -30,9 +30,10 @@ WHATSAPP_LINK = os.getenv('WHATSAPP_LINK')
 ADMIN_IDS = [5991907369, 7692366281] 
 REFERRAL_REWARD = 50 
 MIN_WITHDRAWAL = 700  
-PROMO_START = datetime(2025, 3, 15, 9, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
-PROMO_END = datetime(2025, 3, 15, 23, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
+PROMO_START = datetime(2025, 3, 20, 9, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
+PROMO_END = datetime(2025, 3, 20, 23, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
 PROMO_REWARD = 10000 
+ADSMAN = os.getenv('ADSMAN', 'spinnsisnbot')
 
 def is_promo_active():
     now = datetime.now(pytz.timezone('Africa/Lagos'))
@@ -494,7 +495,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == '🏆 Top Earners':
         await show_top_earners(update, context)
     elif text == '📞 Help & Ads':
-        keyboard =  [[InlineKeyboardButton("Contact Us", url='https://t.me/spinnsisnbot?text=Hello')]]
+        keyboard =  [[InlineKeyboardButton("Contact Us", url=f'https://t.me/{ADSMAN}?text=Hello')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text('For help and Advertisements booking, click the button below to contact us 👇', reply_markup=reply_markup)
     else:
@@ -511,17 +512,17 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
                 "This contest hasn't started yet!\n\n"
                 f"Starts: {PROMO_START.strftime('%B %d, %Y at %I:%M %p')}\n"
                 f"Ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
-                "The user with the most referrals during this 24-hour period will win ₦10,000!",
+                "The 3 users with the most referrals during this 24-hour period will win ₦10,000!",
                 parse_mode="HTML"
             )
         except Exception as e:
             logger.error(f"Error sending promo message: {e}")
             await update.message.reply_text(
-                "🏆 Free ₦10,000 Reward Contest\n\n"
+                "🏆 Free ₦50,000 Reward Contest\n\n"
                 "This contest hasn't started yet!\n\n"
                 f"Starts: {PROMO_START.strftime('%B %d, %Y at %I:%M %p')}\n"
                 f"Ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
-                "The user with the most referrals during this 24-hour period will win ₦10,000!"
+                "The 3 users with the most referrals during this 24-hour period will win ₦10,000!"
             )
         return
     
