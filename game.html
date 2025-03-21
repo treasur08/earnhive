@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bouncing Balls Simulation</title>
+    <style>
+        body { text-align: center; background: black; }
+        canvas { background: white; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = 600;
+        canvas.height = 600;
+        const RADIUS = 200;
+        const OPENING_ANGLE = 20; // Increased opening size
+        const BALL_RADIUS = 5;
+        const BALL_COLORS = ["red", "blue", "green", "yellow", "purple", "cyan", "orange", "pink", 'indigo', 'gold', 'brown'];
+        let balls = [{ 
+            x: 300, 
+            y: 300, 
+            dx: 4, 
+            dy: 3.5, 
+            radius: BALL_RADIUS,
+            mass: 1,
+            color: BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)], 
+            escaping: false, 
+            escapeTime: 0 
+        }];
+        let angleOffset = 0;
+        const rotationSpeed = 1.2; // Speed of circle rotation
+        const ESCAPE_VELOCITY_BOOST = 3; // Boost factor for escaping balls
+        
+        // Snake variables
+        let snake = {
+            active: false,
+            segments: [],
+            speed: 2,
+            length: 20,
+            width: 10,
+            color: "#228B22",
+            headColor: "#32CD32",
+            targetX: 300,
+            targetY: 300,
+            timeLeft: 0,
+            lastMealTime: 0,
+            mealInterval: 500, // Time between eating balls (ms)
+            ballsEaten: 0
+        };
+        
+        let lastSnakeTime = 0;
+        const SNAKE_INTERVAL = 20000; // 20 seconds
+        
+        function initSnake() {
+            // Only initialize if we have more than 100 balls
+            if (balls.length <= 100 || snake.active) return;
+            
+            // Calculate snake duration based on ball count
+            const baseDuration = 5; // Base duration in seconds
+            const extraDuration = Math.floor(balls.length / 50); // Extra seconds per 50 balls
+            const duration = baseDuration + extraDuration;
+            
+            // Random starting position on the circle edge
+            const angle = Math.random() * Math.PI * 2;
+            const startX = 300 + Math.cos(angle) * (RADIUS * 0.8);
+            const startY = 300 + Math.sin(angle) * (RADIUS * 0.8);
+            
+            // Initialize snake segments
+            snake.segments = [];
+            for (let i = 0; i < snake.length; i++) {
+                snake.segments.push({
+                    x: startX,
+                    y: startY
+                });
+            }
+            
+            snake.active = true;
+            snake.timeLeft = duration * 1000; // Convert to milliseconds
+            snake.lastMealTime = 0;
+            snake.ballsEaten = 0;
+            
+            // Set initial target to center
+            snake.targetX = 300;
+            snake.targetY = 300;
+            
+            console.log(`Snake appears for ${duration} seconds!`);
+        }
+        
+        function updateSnake(timestamp) {
+            if (!snake.active) return;
+            
+            // Decrease time left
+            snake.timeLeft -= 16; // Approximate time between frames
+            
+            if (snake.timeLeft <= 0) {
+                snake.active = false;
+                console.log("Snake disappears!");
+                return;
+            }
+            
+            // Find closest ball to target
+            if (balls.length > 0) {
+                // Occasionally pick a new target
+                if (Math.random() < 0.02) {
+                    // Find a random ball that's not escaping
+                    const availableBalls = balls.filter(ball => !ball.escaping);
+                    if (availableBalls.length > 0) {
+                        const targetBall = availableBalls[Math.floor(Math.random() * availableBalls.length)];
+                        snake.targetX = targetBall.x;
+                        snake.targetY = targetBall.y;
+                    }
+                }
+            }
+            
+            // Move head toward target
+            const head = snake.segments[0];
+            const dx = snake.targetX - head.x;
+            const dy = snake.targetY - head.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > 0) {
+                const moveX = (dx / dist) * snake.speed;
+                const moveY = (dy / dist) * snake.speed;
+                
+                // Create new head
+                const newHead = {
+                    x: head.x + moveX,
+                    y: head.y + moveY
+                };
+                
+                // Add new head and remove tail to maintain length
+                snake.segments.unshift(newHead);
+                if (snake.segments.length > snake.length) {
+                    snake.segments.pop();
+                }
+            }
+            
+            // Check if snake can eat balls
+            if (timestamp - snake.lastMealTime > snake.mealInterval) {
+                for (let i = balls.length - 1; i >= 0; i--) {
+                    const ball = balls[i];
+                    if (ball.escaping) continue;
+                    
+                    // Check if ball is close to snake head
+                    const head = snake.segments[0];
+                    const dx = ball.x - head.x;
+                    const dy = ball.y - head.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist < snake.width + ball.radius) {
+                        // Snake eats the ball
+                        balls.splice(i, 1);
+                        snake.lastMealTime = timestamp;
+                        snake.ballsEaten++;
+                        
+                        // Grow snake slightly
+                        if (snake.ballsEaten % 3 === 0) {
+                            snake.length += 2;
+                        }
+                        
+                        break; // Only eat one ball per interval
+                    }
+                }
+            }
+            
+            // Keep snake inside the circle
+            for (let segment of snake.segments) {
+                const distFromCenter = Math.hypot(segment.x - 300, segment.y - 300);
+                if (distFromCenter > RADIUS - snake.width/2) {
+                    // Move segment back inside circle
+                    const angle = Math.atan2(segment.y - 300, segment.x - 300);
+                    segment.x = 300 + Math.cos(angle) * (RADIUS - snake.width/2 - 1);
+                    segment.y = 300 + Math.sin(angle) * (RADIUS - snake.width/2 - 1);
+                    
+                    // Change target to somewhere inside
+                    const randomAngle = Math.random() * Math.PI * 2;
+                    const randomDist = Math.random() * (RADIUS * 0.7);
+                    snake.targetX = 300 + Math.cos(randomAngle) * randomDist;
+                    snake.targetY = 300 + Math.sin(randomAngle) * randomDist;
+                }
+            }
+        }
+        
+        function drawSnake() {
+            if (!snake.active) return;
+            
+            // Draw snake body
+            ctx.lineWidth = snake.width;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = snake.color;
+            
+            ctx.beginPath();
+            ctx.moveTo(snake.segments[0].x, snake.segments[0].y);
+            
+            // Draw curved path through segments
+            for (let i = 1; i < snake.segments.length; i++) {
+                ctx.lineTo(snake.segments[i].x, snake.segments[i].y);
+            }
+            
+            ctx.stroke();
+            
+            // Draw snake head
+            ctx.beginPath();
+            ctx.arc(snake.segments[0].x, snake.segments[0].y, snake.width/2 + 2, 0, Math.PI * 2);
+            ctx.fillStyle = snake.headColor;
+            ctx.fill();
+            
+            // Draw snake eyes
+            const head = snake.segments[0];
+            const angle = snake.segments.length > 1 ? 
+                Math.atan2(snake.segments[0].y - snake.segments[1].y, 
+                          snake.segments[0].x - snake.segments[1].x) : 
+                0;
+            
+            // Left eye
+            ctx.beginPath();
+            ctx.arc(
+                head.x + Math.cos(angle + 0.5) * (snake.width/2), 
+                head.y + Math.sin(angle + 0.5) * (snake.width/2), 
+                2, 0, Math.PI * 2
+            );
+            ctx.fillStyle = "black";
+            ctx.fill();
+            
+            // Right eye
+            ctx.beginPath();
+            ctx.arc(
+                head.x + Math.cos(angle - 0.5) * (snake.width/2), 
+                head.y + Math.sin(angle - 0.5) * (snake.width/2), 
+                2, 0, Math.PI * 2
+            );
+            ctx.fillStyle = "black";
+            ctx.fill();
+        }
+        
+        function drawCircle() {
+            // Clear the canvas first
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw the circle with a gap
+            ctx.beginPath();
+            
+            // Calculate the opening angles in radians
+            const openStart = (angleOffset - OPENING_ANGLE / 2) * (Math.PI / 180);
+            const openEnd = (angleOffset + OPENING_ANGLE / 2) * (Math.PI / 180);
+            
+            // Draw the arc from the end of the opening to the start of the opening (clockwise)
+            ctx.arc(300, 300, RADIUS, openEnd, openStart + Math.PI * 2, false);
+            
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+        
+        function drawBall(ball) {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = ball.color;
+            ctx.fill();
+        }
+        
+        function checkCollision(ball1, ball2) {
+            const dx = ball2.x - ball1.x;
+            const dy = ball2.y - ball1.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < ball1.radius + ball2.radius) {
+                // Collision detected - calculate new velocities
+                const angle = Math.atan2(dy, dx);
+                const sin = Math.sin(angle);
+                const cos = Math.cos(angle);
+                
+                // Rotate ball velocities
+                const vx1 = ball1.dx * cos + ball1.dy * sin;
+                const vy1 = ball1.dy * cos - ball1.dx * sin;
+                const vx2 = ball2.dx * cos + ball2.dy * sin;
+                const vy2 = ball2.dy * cos - ball2.dx * sin;
+                
+                // Calculate new velocities (elastic collision)
+                const vx1Final = ((ball1.mass - ball2.mass) * vx1 + 2 * ball2.mass * vx2) / (ball1.mass + ball2.mass);
+                const vx2Final = ((ball2.mass - ball1.mass) * vx2 + 2 * ball1.mass * vx1) / (ball1.mass + ball2.mass);
+                
+                // Rotate velocities back
+                ball1.dx = vx1Final * cos - vy1 * sin;
+                ball1.dy = vy1 * cos + vx1Final * sin;
+                ball2.dx = vx2Final * cos - vy2 * sin;
+                ball2.dy = vy2 * cos + vx2Final * sin;
+                
+                // Move balls apart to prevent sticking
+                const overlap = (ball1.radius + ball2.radius) - distance;
+                const moveX = overlap * Math.cos(angle) / 2;
+                const moveY = overlap * Math.sin(angle) / 2;
+                
+                ball1.x -= moveX;
+                ball1.y -= moveY;
+                ball2.x += moveX;
+                ball2.y += moveY;
+                
+                return true;
+            }
+            return false;
+        }
+        
+        function isEscaping(ball) {
+            let dist = Math.hypot(ball.x - 300, ball.y - 300);
+            if (dist >= RADIUS - ball.radius) {
+                let ballAngle = Math.atan2(ball.y - 300, ball.x - 300) * (180 / Math.PI);
+                ballAngle = (ballAngle + 360) % 360;
+                let openStart = (angleOffset - OPENING_ANGLE / 2 + 360) % 360;
+                let openEnd = (angleOffset + OPENING_ANGLE / 2 + 360) % 360;
+                
+                // Handle the case where the opening crosses the 0/360 boundary
+                if (openEnd < openStart) {
+                    return (ballAngle >= openStart && ballAngle <= 360) || 
+                           (ballAngle >= 0 && ballAngle <= openEnd);
+                }
+                
+                return ballAngle >= openStart && ballAngle <= openEnd;
+            }
+            return false;
+        }
+        
+        function updateBall(ball) {
+            if (ball.escaping) {
+                // Continue moving in the same direction when escaping
+                ball.x += ball.dx;
+                ball.y += ball.dy;
+                ball.escapeTime++;
+                
+                // Let it be visible briefly before disappearing
+                if (ball.escapeTime > 30) return false;
+                return true;
+            }
+            
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+            
+            // Check if ball is escaping through the opening
+            if (isEscaping(ball)) {
+                ball.escaping = true;
+                
+                // Boost the velocity to make the ball shoot out faster
+                const angle = Math.atan2(ball.y - 300, ball.x - 300);
+                const outwardVelocity = {
+                    x: Math.cos(angle) * ESCAPE_VELOCITY_BOOST,
+                    y: Math.sin(angle) * ESCAPE_VELOCITY_BOOST
+                };
+                
+                // Add the outward velocity to the current velocity
+                ball.dx += outwardVelocity.x;
+                ball.dy += outwardVelocity.y;
+                
+                return true;
+            }
+            
+            // Check for collision with the circle boundary
+            let dist = Math.hypot(ball.x - 300, ball.y - 300);
+            if (dist >= RADIUS - ball.radius) {
+                let angle = Math.atan2(ball.y - 300, ball.x - 300);
+                
+                                // Reflect velocity based on the angle of impact
+                                const normalX = Math.cos(angle);
+                const normalY = Math.sin(angle);
+                const dot = ball.dx * normalX + ball.dy * normalY;
+                
+                ball.dx -= 2 * dot * normalX;
+                ball.dy -= 2 * dot * normalY;
+                
+                // Move ball back inside the circle to prevent sticking
+                ball.x = 300 + (RADIUS - ball.radius - 1) * Math.cos(angle);
+                ball.y = 300 + (RADIUS - ball.radius - 1) * Math.sin(angle);
+            }
+            
+            return true;
+        }
+        
+        function handleCollisions() {
+            for (let i = 0; i < balls.length; i++) {
+                for (let j = i + 1; j < balls.length; j++) {
+                    if (!balls[i].escaping && !balls[j].escaping) {
+                        checkCollision(balls[i], balls[j]);
+                    }
+                }
+            }
+        }
+        
+        function createNewBall() {
+            return {
+                x: 300,
+                y: 300,
+                dx: Math.random() * 10 - 3,
+                dy: Math.random() * 10 - 3,
+                radius: BALL_RADIUS,
+                mass: 1,
+                color: BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)],
+                escaping: false,
+                escapeTime: 0
+            };
+        }
+        
+        function gameLoop(timestamp) {
+            // Check if we should spawn a snake
+            if (balls.length > 100 && timestamp - lastSnakeTime > SNAKE_INTERVAL) {
+                initSnake();
+                lastSnakeTime = timestamp;
+            }
+            
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Rotate the opening
+            angleOffset = (angleOffset + rotationSpeed) % 360;
+            
+            // Draw the circle with the opening
+            drawCircle();
+            
+            // Update and draw snake
+            updateSnake(timestamp);
+            drawSnake();
+            
+            // Handle ball collisions
+            handleCollisions();
+            
+            // Update and draw balls
+            let newBalls = [];
+            let ballsToKeep = [];
+            
+            // Process each ball
+            for (let i = 0; i < balls.length; i++) {
+                const keepBall = updateBall(balls[i]);
+                
+                if (keepBall) {
+                    // Keep this ball
+                    ballsToKeep.push(balls[i]);
+                    drawBall(balls[i]);
+                } else {
+                    // Ball escaped, create two new balls
+                    newBalls.push(createNewBall());
+                    newBalls.push(createNewBall());
+                }
+            }
+            
+            // Update the balls array with balls to keep
+            balls = ballsToKeep;
+            
+            // Add new balls
+            balls.push(...newBalls);
+            
+            // Display ball count
+            ctx.fillStyle = "black";
+            ctx.font = "16px Arial";
+            ctx.fillText(`Balls: ${balls.length}`, 20, 30);
+            
+            // If snake is active, show its info
+            if (snake.active) {
+                ctx.fillText(`Snake: ${Math.ceil(snake.timeLeft / 1000)}s left`, 20, 55);
+                ctx.fillText(`Eaten: ${snake.ballsEaten}`, 20, 80);
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start the game
+        gameLoop(0);
+    </script>
+</body>
+</html>

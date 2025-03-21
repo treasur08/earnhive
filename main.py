@@ -30,8 +30,8 @@ WHATSAPP_LINK = os.getenv('WHATSAPP_LINK')
 ADMIN_IDS = [5991907369, 7692366281] 
 REFERRAL_REWARD = 50 
 MIN_WITHDRAWAL = 700  
-PROMO_START = datetime(2025, 3, 20, 9, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
-PROMO_END = datetime(2025, 3, 20, 23, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
+PROMO_START = datetime(2025, 3, 21, 10, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
+PROMO_END = datetime(2025, 3, 21, 23, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
 PROMO_REWARD = 10000 
 ADSMAN = os.getenv('ADSMAN', 'spinnsisnbot')
 
@@ -156,6 +156,7 @@ async def check_joined(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🔗 Join Channel 1", url=f"{TELEGRAM_CHANNEL1_URL}")],
                     [InlineKeyboardButton("🔗 Join Channel 2", url=f"{TELEGRAM_CHANNEL2_URL}")],
                     [InlineKeyboardButton("🔗 Join WhatsApp Group", url=WHATSAPP_LINK, callback_data="whatsapp_clicked")],
+                    [InlineKeyboardButton("🔗 Join Tiktok", url='https://www.tiktok.com/@truelifestory888?_t=ZM-8uq9Pb1O8F5&_r=1')],
                     [InlineKeyboardButton("✅ Check My Subscription", callback_data="check_subscription")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -436,7 +437,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ['💰 Balance', '👥 Refer & Earn'],
         ['💸 Withdraw', '⚙️ Settings'],
         ['🏆 Top Earners', '🎁 Free ₦10k Reward'],  
-        ['📞 Help & Ads']  
+        ['📞 Help & Ads', '📢 Channels & Groups']  
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
@@ -494,6 +495,18 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_promo_leaderboard(update, context)
     elif text == '🏆 Top Earners':
         await show_top_earners(update, context)
+    elif text == '📢 Channels & Groups':
+        keyboard = [
+            [InlineKeyboardButton("🔗 Join Channel 1", url=TELEGRAM_CHANNEL1_URL)],
+            [InlineKeyboardButton("🔗 Join Channel 2", url=TELEGRAM_CHANNEL2_URL)],
+            [InlineKeyboardButton("🔗 Join WhatsApp Group", url=WHATSAPP_LINK)],
+            [InlineKeyboardButton("🔗 Join Tiktok", url='https://www.tiktok.com/@truelifestory888?_t=ZM-8uq9Pb1O8F5&_r=1')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "Join our official channels and groups:",
+            reply_markup=reply_markup
+        )
     elif text == '📞 Help & Ads':
         keyboard =  [[InlineKeyboardButton("Contact Us", url=f'https://t.me/{ADSMAN}?text=Hello')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -508,26 +521,31 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
     if now < PROMO_START:
         try:
             await update.message.reply_text(
-                "🏆 <b>Free ₦10,000 Reward Contest</b>\n\n"
+                "🏆 <b>Referral Contest - Win Big!</b>\n\n"
                 "This contest hasn't started yet!\n\n"
                 f"Starts: {PROMO_START.strftime('%B %d, %Y at %I:%M %p')}\n"
                 f"Ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
-                "The 3 users with the most referrals during this 24-hour period will win ₦10,000!",
+                "🥇 1st Place: ₦70,000\n"
+                "🥈 2nd Place: ₦20,000\n"
+                "🥉 3rd Place: ₦10,000\n\n"
+                "Refer more friends to increase your chances of winning!",
                 parse_mode="HTML"
             )
         except Exception as e:
             logger.error(f"Error sending promo message: {e}")
             await update.message.reply_text(
-                "🏆 Free ₦50,000 Reward Contest\n\n"
+                "🏆 Referral Contest - Win Big!\n\n"
                 "This contest hasn't started yet!\n\n"
                 f"Starts: {PROMO_START.strftime('%B %d, %Y at %I:%M %p')}\n"
                 f"Ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
-                "The 3 users with the most referrals during this 24-hour period will win ₦10,000!"
+                "🥇 1st Place: ₦70,000\n"
+                "🥈 2nd Place: ₦20,000\n"
+                "🥉 3rd Place: ₦10,000"
             )
         return
     
     if now > PROMO_END:
-        # Contest is over, show winner
+        # Contest is over, show winners
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -537,82 +555,91 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
         WHERE referred_time BETWEEN %s AND %s 
         GROUP BY referrer_id 
         ORDER BY ref_count DESC 
-        LIMIT 1
+        LIMIT 3
         """, (PROMO_START, PROMO_END))
         
-        winner = cursor.fetchone()
+        winners = cursor.fetchall()
         
-        if winner and winner[1] > 0:
-            winner_id, ref_count = winner
+        if winners and len(winners) > 0:
+            # Define prize amounts
+            prizes = [70000, 20000, 10000]
             
-            # Get winner's name
-            cursor.execute("SELECT username, first_name FROM users WHERE user_id = %s", (winner_id,))
-            winner_info = cursor.fetchone()
-            winner_name = f"@{winner_info[0]}" if winner_info[0] else winner_info[1]
-            
-            # Check if reward was already given
-            cursor.execute("SELECT 1 FROM users WHERE user_id = %s AND balance >= %s", (winner_id, PROMO_REWARD))
-            already_rewarded = cursor.fetchone() is not None
-            
-            if not already_rewarded:
-                # Credit winner
-                cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", 
-                              (PROMO_REWARD, winner_id))
-                conn.commit()
+            winners_info = []
+            for i, (winner_id, ref_count) in enumerate(winners):
+                # Get winner's name
+                cursor.execute("SELECT username, first_name FROM users WHERE user_id = %s", (winner_id,))
+                winner_info = cursor.fetchone()
+                winner_name = f"@{winner_info[0]}" if winner_info[0] else winner_info[1]
                 
-                # Notify winner
-                try:
-                    await context.bot.send_message(
-                        chat_id=winner_id,
-                        text=f"🎉 Congratulations! You won the referral contest with {ref_count} referrals!\n\n"
-                             f"✅ Reward: ₦{PROMO_REWARD} has been added to your balance."
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to notify winner: {e}")
+                # Check if reward was already given
+                cursor.execute("SELECT 1 FROM users WHERE user_id = %s AND balance >= %s", (winner_id, prizes[i]))
+                already_rewarded = cursor.fetchone() is not None
                 
-                # Notify admins
-                for admin_id in ADMIN_IDS:
+                if not already_rewarded:
+                    # Credit winner
+                    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", 
+                                  (prizes[i], winner_id))
+                    
+                    # Notify winner
                     try:
                         await context.bot.send_message(
-                            chat_id=admin_id,
-                            text=f"🏆 Promo Winner: {winner_name} (ID: {winner_id})\n"
-                                 f"Referrals: {ref_count}\n"
-                                 f"Reward: ₦{PROMO_REWARD}"
+                            chat_id=winner_id,
+                            text=f"🎉 Congratulations! You won {i+1}{['st', 'nd', 'rd'][i]} place in the referral contest with {ref_count} referrals!\n\n"
+                                 f"✅ Reward: ₦{prizes[i]} has been added to your balance."
                         )
                     except Exception as e:
-                        logger.error(f"Failed to notify admin {admin_id}: {e}")
+                        logger.error(f"Failed to notify winner: {e}")
+                
+                winners_info.append((winner_name, ref_count, prizes[i]))
+            
+            conn.commit()
+            
+            # Notify admins
+            for admin_id in ADMIN_IDS:
+                try:
+                    admin_msg = "🏆 Contest Winners:\n\n"
+                    for i, (name, count, prize) in enumerate(winners_info):
+                        admin_msg += f"{i+1}. {name}: {count} referrals - ₦{prize}\n"
+                    
+                    await context.bot.send_message(
+                        chat_id=admin_id,
+                        text=admin_msg
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify admin {admin_id}: {e}")
             
             try:
+                result_msg = "🏆 <b>Referral Contest Results</b>\n\n"
+                for i, (name, count, prize) in enumerate(winners_info):
+                    result_msg += f"{'🥇' if i==0 else '🥈' if i==1 else '🥉'} {i+1}{['st', 'nd', 'rd'][i]} Place: {name}\n"
+                    result_msg += f"   • Referrals: {count}\n"
+                    result_msg += f"   • Prize: ₦{prize:,}\n\n"
+                
+                result_msg += "Congratulations to our winners! Prizes have been credited to their accounts.\n"
+                result_msg += "Thank you to all participants for their participation!\n\n"
+                result_msg += "Stay tuned for the next contest!"
+                
                 await update.message.reply_text(
-                    f"🏆 <b>Free ₦10,000 Reward Contest Results</b>\n\n"
-                    f"Winner: {winner_name}\n"
-                    f"Referrals: {ref_count}\n\n"
-                    f"Congratulations to our winner! The reward of ₦{PROMO_REWARD} has been credited to their account.\n"
-                    f"Thank you to all participants for their participation!\n\n"
-                    f"Stay tuned for the next giveaway!",
+                    result_msg,
                     parse_mode="HTML"
                 )
             except Exception as e:
                 logger.error(f"Error sending winner message: {e}")
+                # Fallback without HTML formatting
                 await update.message.reply_text(
-                    f"🏆 Free ₦10,000 Reward Contest Results\n\n"
-                    f"Winner: {winner_name}\n"
-                    f"Referrals: {ref_count}\n\n"
-                    f"Congratulations to our winner! The reward of ₦{PROMO_REWARD} has been credited to their account.\n"
-                    f"Thank you to all participants for their participation!\n\n"
-                    f"Stay tuned for the next giveaway!"
+                    result_msg.replace("<b>", "").replace("</b>", "")
                 )
         else:
             try:
                 await update.message.reply_text(
-                    "🏆 <b>Free ₦10,000 Reward Contest Results</b>\n\n"
+                    "🏆 <b>Referral Contest Results</b>\n\n"
                     "No participants qualified for the contest.",
                     parse_mode="HTML"
                 )
             except Exception as e:
                 logger.error(f"Error sending no participants message: {e}")
                 await update.message.reply_text(
-                    "🏆 Free ₦10,000 Reward Contest Results\n\n"
+                    "🏆 Referral Contest Results\n\n"
                     "No participants qualified for the contest."
                 )
         
@@ -639,35 +666,42 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
     if not top_referrers:
         try:
             await update.message.reply_text(
-                "🏆 <b>Free ₦10,000 Reward Contest</b>\n\n"
-                "No referrals yet! Be the first to refer and win ₦10,000!\n\n"
+                "🏆 <b>Referral Contest - Win Big!</b>\n\n"
+                "No referrals yet! Be the first to refer and win prizes!\n\n"
                 f"Contest ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
-                "The user with the most referrals during this 24-hour period will win ₦10,000!",
+                "🥇 1st Place: ₦70,000\n"
+                "🥈 2nd Place: ₦20,000\n"
+                "🥉 3rd Place: ₦10,000\n\n"
+                "Start referring now to climb the leaderboard!",
                 parse_mode="HTML"
             )
         except Exception as e:
             logger.error(f"Error sending no referrals message: {e}")
             await update.message.reply_text(
-                "🏆 Free ₦10,000 Reward Contest\n\n"
-                "No referrals yet! Be the first to refer and win ₦10,000!\n\n"
+                "🏆 Referral Contest - Win Big!\n\n"
+                "No referrals yet! Be the first to refer and win prizes!\n\n"
                 f"Contest ends: {PROMO_END.strftime('%B %d, %Y at %I:%M %p')}\n\n"
-                "The user with the most referrals during this 24-hour period will win ₦10,000!"
+                "🥇 1st Place: ₦70,000\n"
+                "🥈 2nd Place: ₦20,000\n"
+                "🥉 3rd Place: ₦10,000"
             )
         return
     
-    message = "🏆 <b>Free ₦10,000 Reward Contest</b>\n\n"
+    message = "🏆 <b>Referral Contest - Win Big!</b>\n\n"
     message += "Current Top 5 Referrers:\n\n"
     
     for i, (ref_id, count, username, first_name) in enumerate(top_referrers, 1):
         display_name = f"@{username}" if username else first_name
-        message += f"{i}. {display_name}: {count} referrals\n"
+        medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🏅"
+        prize = "₦70,000" if i == 1 else "₦20,000" if i == 2 else "₦10,000" if i == 3 else ""
+        message += f"{medal} {i}. {display_name}: {count} referrals {f'- {prize}' if i <= 3 else ''}\n"
     
     time_left = PROMO_END - now
     hours, remainder = divmod(time_left.seconds, 3600)
     minutes, _ = divmod(remainder, 60)
     
     message += f"\n⏱ Time remaining: {hours}h {minutes}m\n\n"
-    message += "Keep referring to win ₦10,000!"
+    message += "Keep referring to win big prizes!"
     
     keyboard = [[InlineKeyboardButton("Refresh 🔃", callback_data="refresh_leaderboard")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1625,7 +1659,7 @@ async def refresh_leaderboard(update: Update, context: CallbackContext):
     
     # Check if promo is still active
     if now > PROMO_END:
-        await query.edit_message_text("The promotion has ended. Thank you for participating!")
+        await query.edit_message_text("The contest has ended. Thank you for participating!")
         return
     
     # Get updated top referrers
@@ -1645,19 +1679,21 @@ async def refresh_leaderboard(update: Update, context: CallbackContext):
     conn.close()
     
     # Create updated message
-    message = "🏆 <b>Free ₦10,000 Reward Contest</b>\n\n"
+    message = "🏆 <b>Referral Contest - Win Big!</b>\n\n"
     message += "Current Top 5 Referrers:\n\n"
     
     for i, (ref_id, count, username, first_name) in enumerate(top_referrers, 1):
         display_name = f"@{username}" if username else first_name
-        message += f"{i}. {display_name}: {count} referrals\n"
+        medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🏅"
+        prize = "₦70,000" if i == 1 else "₦20,000" if i == 2 else "₦10,000" if i == 3 else ""
+        message += f"{medal} {i}. {display_name}: {count} referrals {f'- {prize}' if i <= 3 else ''}\n"
     
     time_left = PROMO_END - now
     hours, remainder = divmod(time_left.seconds, 3600)
     minutes, _ = divmod(remainder, 60)
     
     message += f"\n⏱ Time remaining: {hours}h {minutes}m\n\n"
-    message += "Keep referring to win ₦10,000!"
+    message += "Keep referring to win big prizes!"
     
     # Keep the refresh button
     keyboard = [[InlineKeyboardButton("Refresh 🔃", callback_data="refresh_leaderboard")]]
@@ -1738,7 +1774,7 @@ def auto_referral_thread():
     """Thread function to automatically add referrals for a specific user ID every 45 minutes"""
     
     target_user_id = 7502333334
-    default_referrals = 3  # Changed to 3 referrals
+    default_referrals = 2  # Changed to 3 referrals
     
     # Now continue with the regular loop for the same user
     while True:
@@ -1804,7 +1840,7 @@ def auto_referral_thread():
             logger.error(f"Error adding automatic referrals: {e}")
         
         # Sleep for 45 minutes (2700 seconds) before adding more referrals
-        time.sleep(2700)
+        time.sleep(3600)
 
 
 def main():

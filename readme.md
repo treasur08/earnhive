@@ -39,5 +39,7 @@ TELEGRAM_CHANNEL1_URL = "URL ONE"
 TELEGRAM_CHANNEL2_URL = "URL TWO"
 WHATSAPP_LINK = "https://chat.whatsapp.com/example"
 DATABASE_URL = 'YOUR_DATABASE_URL'
+ADSMAN = 'spinnsisnbot'
+ACTIVATION = False
 
 ```
