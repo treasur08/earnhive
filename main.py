@@ -31,7 +31,7 @@ ADMIN_IDS = [5991907369, 7692366281]
 REFERRAL_REWARD = 50 
 MIN_WITHDRAWAL = 700  
 PROMO_START = datetime(2025, 3, 21, 10, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
-PROMO_END = datetime(2025, 3, 21, 23, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
+PROMO_END = datetime(2025, 3, 24, 10, 0, 0, tzinfo=pytz.timezone('Africa/Lagos'))
 PROMO_REWARD = 10000 
 ADSMAN = os.getenv('ADSMAN', 'spinnsisnbot')
 
