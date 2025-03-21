@@ -436,7 +436,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         ['💰 Balance', '👥 Refer & Earn'],
         ['💸 Withdraw', '⚙️ Settings'],
-        ['🏆 Top Earners', '🎁 Free ₦10k Reward'],  
+        ['🏆 Top Earners', '🎁 Free ₦100k Reward'],  
         ['📞 Help & Ads', '📢 Channels & Groups']  
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -491,7 +491,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_withdrawal(update, context)
     elif text == '⚙️ Settings':
         await show_settings(update, context)
-    elif text == '🎁 Free ₦10k Reward':
+    elif text == '🎁 Free ₦100k Reward':
         await show_promo_leaderboard(update, context)
     elif text == '🏆 Top Earners':
         await show_top_earners(update, context)
