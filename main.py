@@ -1562,6 +1562,7 @@ async def dump_database(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error dumping database: {e}")
         await update.message.reply_text(f"❌ Error creating backup: {str(e)}")
 
+
 async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
@@ -1672,8 +1673,6 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error processing backup file: {e}")
         await update.message.reply_text(f"❌ Error processing backup file: {str(e)}")
-
-
 
 async def refresh_leaderboard(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -1951,5 +1950,8 @@ def run_web_server():
         httpd.serve_forever()  
 
 if __name__ == "__main__":
+    server_thread = threading.Thread(target=run_web_server)
+   
+    server_thread.start()
     
     main()
