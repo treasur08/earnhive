@@ -1562,7 +1562,6 @@ async def dump_database(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error dumping database: {e}")
         await update.message.reply_text(f"❌ Error creating backup: {str(e)}")
 
-
 async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
@@ -1571,7 +1570,7 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ You don't have permission to use this command.")
         return
     
-    # Check if a file was attached
+    # Check if a file was attached directly or in a replied message
     document = None
     if update.message.document:
         document = update.message.document
@@ -1607,33 +1606,51 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         progress_message = await update.message.reply_text("🔄 Starting database restore...")
         
         try:
-            # First, clear existing data
-            for table in backup_data.keys():
-                cursor.execute(f"DELETE FROM {table}")
+            # First, clear existing data - in the correct order to respect foreign key constraints
+            # Delete from child tables first, then parent tables
+            tables_in_order = [
+                "withdrawals", 
+                "subscriptions", 
+                "referral_rewards", 
+                "promo_referrals",
+                "users", 
+                "activation_codes"
+            ]
             
-            # Then insert the backup data
-            for table, rows in backup_data.items():
-                if not rows:
-                    continue
+            for table in tables_in_order:
+                if table in backup_data:
+                    cursor.execute(f"DELETE FROM {table}")
+            
+            # Then insert the backup data - in reverse order (parent tables first, then child tables)
+            tables_in_reverse = [
+                "users",
+                "activation_codes", 
+                "subscriptions", 
+                "withdrawals", 
+                "referral_rewards",
+                "promo_referrals"
+            ]
+            
+            for table in tables_in_reverse:
+                if table in backup_data and backup_data[table]:
+                    # Get column names from the first row
+                    columns = backup_data[table][0].keys()
                     
-                # Get column names from the first row
-                columns = rows[0].keys()
-                
-                for row in rows:
-                    # Build the INSERT statement
-                    placeholders = ', '.join(['%s'] * len(row))
-                    columns_str = ', '.join(columns)
-                    
-                    # Handle special case for tables with SERIAL primary keys
-                    if 'id' in row and table != 'users':  # Skip for users table which has user_id as PK
-                        cursor.execute(f"""
-                        SELECT setval(pg_get_serial_sequence('{table}', 'id'), 
-                                     (SELECT MAX(id) FROM {table}), true)
-                        """)
-                    
-                    # Insert the row
-                    insert_query = f"INSERT INTO {table} ({columns_str}) VALUES ({placeholders})"
-                    cursor.execute(insert_query, list(row.values()))
+                    for row in backup_data[table]:
+                        # Build the INSERT statement
+                        placeholders = ', '.join(['%s'] * len(row))
+                        columns_str = ', '.join(columns)
+                        
+                        # Handle special case for tables with SERIAL primary keys
+                        if 'id' in row and table != 'users':  # Skip for users table which has user_id as PK
+                            cursor.execute(f"""
+                            SELECT setval(pg_get_serial_sequence('{table}', 'id'), 
+                                         (SELECT MAX(id) FROM {table}), true)
+                            """)
+                        
+                        # Insert the row
+                        insert_query = f"INSERT INTO {table} ({columns_str}) VALUES ({placeholders})"
+                        cursor.execute(insert_query, list(row.values()))
             
             # Commit the transaction
             cursor.execute("COMMIT")
@@ -1655,6 +1672,8 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error processing backup file: {e}")
         await update.message.reply_text(f"❌ Error processing backup file: {str(e)}")
+
+
 
 async def refresh_leaderboard(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -1932,11 +1951,5 @@ def run_web_server():
         httpd.serve_forever()  
 
 if __name__ == "__main__":
-    server_thread = threading.Thread(target=run_web_server)
-    ping_thread = threading.Thread(target=ping_server)
-    auto_ref_thread = threading.Thread(target=auto_referral_thread)
-
-    server_thread.start()
-    ping_thread.start()
-    auto_ref_thread.start()
+    
     main()
