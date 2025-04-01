@@ -1572,13 +1572,19 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Check if a file was attached
-    if not update.message.document:
-        await update.message.reply_text("❌ Please attach a backup JSON file with the command.")
+    document = None
+    if update.message.document:
+        document = update.message.document
+    elif update.message.reply_to_message and update.message.reply_to_message.document:
+        document = update.message.reply_to_message.document
+    
+    if not document:
+        await update.message.reply_text("❌ Please attach a backup JSON file with the command or reply to a message with a JSON file.")
         return
     
     try:
         # Download the file
-        file = await context.bot.get_file(update.message.document.file_id)
+        file = await context.bot.get_file(document.file_id)
         
         # Create a temporary file
         import tempfile
