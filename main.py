@@ -1600,6 +1600,12 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = get_db_connection()
         cursor = conn.cursor()
         
+        # Get current schema information
+        table_schemas = {}
+        for table in backup_data.keys():
+            cursor.execute(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table}'")
+            table_schemas[table] = [row[0] for row in cursor.fetchall()]
+        
         # Start a transaction
         cursor.execute("BEGIN")
         
@@ -1635,12 +1641,21 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for table in tables_in_reverse:
                 if table in backup_data and backup_data[table]:
                     # Get column names from the first row
-                    columns = backup_data[table][0].keys()
+                    backup_columns = list(backup_data[table][0].keys())
+                    
+                    # Filter columns to only include those that exist in the current schema
+                    valid_columns = [col for col in backup_columns if col in table_schemas[table]]
                     
                     for row in backup_data[table]:
+                        # Only include values for columns that exist in the schema
+                        filtered_row = {k: v for k, v in row.items() if k in valid_columns}
+                        
+                        if not filtered_row:
+                            continue  # Skip if no valid columns
+                        
                         # Build the INSERT statement
-                        placeholders = ', '.join(['%s'] * len(row))
-                        columns_str = ', '.join(columns)
+                        placeholders = ', '.join(['%s'] * len(filtered_row))
+                        columns_str = ', '.join(filtered_row.keys())
                         
                         # Handle special case for tables with SERIAL primary keys
                         if 'id' in row and table != 'users':  # Skip for users table which has user_id as PK
@@ -1651,7 +1666,7 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         
                         # Insert the row
                         insert_query = f"INSERT INTO {table} ({columns_str}) VALUES ({placeholders})"
-                        cursor.execute(insert_query, list(row.values()))
+                        cursor.execute(insert_query, list(filtered_row.values()))
             
             # Commit the transaction
             cursor.execute("COMMIT")
