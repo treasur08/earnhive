@@ -594,19 +594,7 @@ async def show_promo_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
             
             conn.commit()
             
-            # Notify admins
-            for admin_id in ADMIN_IDS:
-                try:
-                    admin_msg = "🏆 Contest Winners:\n\n"
-                    for i, (name, count, prize) in enumerate(winners_info):
-                        admin_msg += f"{i+1}. {name}: {count} referrals - ₦{prize}\n"
-                    
-                    await context.bot.send_message(
-                        chat_id=admin_id,
-                        text=admin_msg
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to notify admin {admin_id}: {e}")
+        
             
             try:
                 result_msg = "🏆 <b>Referral Contest Results</b>\n\n"
