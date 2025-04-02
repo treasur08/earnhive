@@ -1562,7 +1562,6 @@ async def dump_database(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error dumping database: {e}")
         await update.message.reply_text(f"❌ Error creating backup: {str(e)}")
 
-
 async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
@@ -1603,8 +1602,12 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Get current schema information
         table_schemas = {}
         for table in backup_data.keys():
-            cursor.execute(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table}'")
-            table_schemas[table] = [row[0] for row in cursor.fetchall()]
+            try:
+                cursor.execute(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table}'")
+                table_schemas[table] = [row[0] for row in cursor.fetchall()]
+            except Exception as e:
+                logger.error(f"Error getting schema for table {table}: {e}")
+                table_schemas[table] = []
         
         # Start a transaction
         cursor.execute("BEGIN")
@@ -1613,8 +1616,10 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         progress_message = await update.message.reply_text("🔄 Starting database restore...")
         
         try:
-            # First, clear existing data - in the correct order to respect foreign key constraints
-            # Delete from child tables first, then parent tables
+            # First, disable foreign key constraints temporarily
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            
+            # Clear existing data - in the correct order to respect foreign key constraints
             tables_in_order = [
                 "withdrawals", 
                 "subscriptions", 
@@ -1626,7 +1631,11 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             for table in tables_in_order:
                 if table in backup_data:
-                    cursor.execute(f"DELETE FROM {table}")
+                    try:
+                        cursor.execute(f"DELETE FROM {table}")
+                    except Exception as e:
+                        logger.error(f"Error clearing table {table}: {e}")
+                        # Continue with other tables
             
             # Then insert the backup data - in reverse order (parent tables first, then child tables)
             tables_in_reverse = [
@@ -1641,10 +1650,17 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for table in tables_in_reverse:
                 if table in backup_data and backup_data[table]:
                     # Get column names from the first row
+                    if not backup_data[table]:
+                        continue
+                        
                     backup_columns = list(backup_data[table][0].keys())
                     
                     # Filter columns to only include those that exist in the current schema
                     valid_columns = [col for col in backup_columns if col in table_schemas[table]]
+                    
+                    if not valid_columns:
+                        logger.warning(f"No valid columns found for table {table}")
+                        continue
                     
                     for row in backup_data[table]:
                         # Only include values for columns that exist in the schema
@@ -1653,25 +1669,46 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         if not filtered_row:
                             continue  # Skip if no valid columns
                         
-                        # Build the INSERT statement
-                        placeholders = ', '.join(['%s'] * len(filtered_row))
-                        columns_str = ', '.join(filtered_row.keys())
-                        
-                        # Handle special case for tables with SERIAL primary keys
-                        if 'id' in row and table != 'users':  # Skip for users table which has user_id as PK
-                            cursor.execute(f"""
-                            SELECT setval(pg_get_serial_sequence('{table}', 'id'), 
-                                         (SELECT MAX(id) FROM {table}), true)
-                            """)
-                        
-                        # Insert the row
-                        insert_query = f"INSERT INTO {table} ({columns_str}) VALUES ({placeholders})"
-                        cursor.execute(insert_query, list(filtered_row.values()))
+                        try:
+                            # Build the INSERT statement
+                            placeholders = ', '.join(['%s'] * len(filtered_row))
+                            columns_str = ', '.join(filtered_row.keys())
+                            
+                            # Handle special case for tables with SERIAL primary keys
+                            if 'id' in row and table != 'users':  # Skip for users table which has user_id as PK
+                                try:
+                                    cursor.execute(f"""
+                                    SELECT setval(pg_get_serial_sequence('{table}', 'id'), 
+                                                 (SELECT COALESCE(MAX(id), 0) FROM {table}), true)
+                                    """)
+                                except Exception as e:
+                                    logger.error(f"Error setting sequence for {table}: {e}")
+                            
+                            # Insert the row
+                            insert_query = f"INSERT INTO {table} ({columns_str}) VALUES ({placeholders})"
+                            cursor.execute(insert_query, list(filtered_row.values()))
+                        except Exception as e:
+                            logger.error(f"Error inserting row into {table}: {e}")
+                            # Continue with other rows
+            
+            # Re-enable foreign key constraints
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
             
             # Commit the transaction
             cursor.execute("COMMIT")
             
-            await progress_message.edit_text("✅ Database restore completed successfully!")
+            # Verify database connection
+            try:
+                test_conn = get_db_connection()
+                test_cursor = test_conn.cursor()
+                test_cursor.execute("SELECT 1")
+                test_cursor.fetchone()
+                test_conn.close()
+                
+                await progress_message.edit_text("✅ Database restore completed successfully! Database connection verified.")
+            except Exception as e:
+                logger.error(f"Database connection verification failed: {e}")
+                await progress_message.edit_text("⚠️ Database restore completed, but connection verification failed. Bot may need to be restarted.")
             
         except Exception as e:
             # Rollback in case of error
@@ -1688,6 +1725,34 @@ async def upload_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error processing backup file: {e}")
         await update.message.reply_text(f"❌ Error processing backup file: {str(e)}")
+
+# Add a ping command to verify bot functionality
+async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simple command to verify the bot is working"""
+    start_time = time.time()
+    
+    # Test database connection
+    db_status = "✅"
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Database connection error in ping: {e}")
+        db_status = "❌"
+    
+    # Calculate response time
+    response_time = (time.time() - start_time) * 1000  # in milliseconds
+    
+    await update.message.reply_text(
+        f"🏓 Pong!\n\n"
+        f"Response time: {response_time:.2f}ms\n"
+        f"Database connection: {db_status}\n\n"
+        f"Bot is operational."
+    )
+
 
 async def refresh_leaderboard(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -1903,6 +1968,7 @@ def main():
     application.add_handler(CommandHandler("dump", dump_database))
     application.add_handler(CommandHandler("upload", upload_backup))
     application.add_handler(CommandHandler("id", get_id))
+    application.add_handler(CommandHandler("ping", ping))
     
     # Add broadcast handler
     broadcast_handler = ConversationHandler(
@@ -1966,7 +2032,9 @@ def run_web_server():
 
 if __name__ == "__main__":
     server_thread = threading.Thread(target=run_web_server)
+    ping_thread = threading.Thread(target=ping_server)
    
     server_thread.start()
+    ping_thread.start()
     
     main()
