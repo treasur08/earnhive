@@ -155,8 +155,9 @@ async def check_joined(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = [
                     [InlineKeyboardButton("🔗 Join Channel 1", url=f"{TELEGRAM_CHANNEL1_URL}")],
                     [InlineKeyboardButton("🔗 Join Channel 2", url=f"{TELEGRAM_CHANNEL2_URL}")],
-                    [InlineKeyboardButton("🔗 Join WhatsApp Group", url=WHATSAPP_LINK, callback_data="whatsapp_clicked")],
-                    [InlineKeyboardButton("🔗 Join Tiktok", url='https://www.tiktok.com/@truelifestory888?_t=ZM-8uq9Pb1O8F5&_r=1')],
+                    [InlineKeyboardButton("🔗 Join WhatsApp Channel I", url=WHATSAPP_LINK, callback_data="whatsapp_clicked")],
+                    [InlineKeyboardButton("🔗 Join WhatsApp Group II", url="https://chat.whatsapp.com/Hy80h6Xd8olJg8PiVYpJRI")],
+                    [InlineKeyboardButton("🔗 Join Whatsapp Giveaway", url='https://chat.whatsapp.com/J1XbpqThdzzLJrCqweCsER')],
                     [InlineKeyboardButton("✅ Check My Subscription", callback_data="check_subscription")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -497,11 +498,12 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_top_earners(update, context)
     elif text == '📢 Channels & Groups':
         keyboard = [
-            [InlineKeyboardButton("🔗 Join Channel 1", url=TELEGRAM_CHANNEL1_URL)],
-            [InlineKeyboardButton("🔗 Join Channel 2", url=TELEGRAM_CHANNEL2_URL)],
-            [InlineKeyboardButton("🔗 Join WhatsApp Group", url=WHATSAPP_LINK)],
-            [InlineKeyboardButton("🔗 Join Tiktok", url='https://www.tiktok.com/@truelifestory888?_t=ZM-8uq9Pb1O8F5&_r=1')]
-        ]
+                    [InlineKeyboardButton("🔗 Join Channel 1", url=f"{TELEGRAM_CHANNEL2_URL}")],
+                    [InlineKeyboardButton("🔗 Join WhatsApp Channel I", url=WHATSAPP_LINK, callback_data="whatsapp_clicked")],
+                    [InlineKeyboardButton("🔗 Join WhatsApp Group II", url="https://chat.whatsapp.com/Hy80h6Xd8olJg8PiVYpJRI")],
+                    [InlineKeyboardButton("🔗 Join Whatsapp Giveaway", url='https://chat.whatsapp.com/J1XbpqThdzzLJrCqweCsER')],
+                    [InlineKeyboardButton("✅ Check My Subscription", callback_data="check_subscription")]
+                ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
             "Join our official channels and groups:",
