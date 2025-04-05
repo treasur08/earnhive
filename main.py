@@ -156,8 +156,7 @@ async def check_joined(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🔗 Join Channel 1", url=f"{TELEGRAM_CHANNEL1_URL}")],
                     [InlineKeyboardButton("🔗 Join Channel 2", url=f"{TELEGRAM_CHANNEL2_URL}")],
                     [InlineKeyboardButton("🔗 Join WhatsApp Channel I", url=WHATSAPP_LINK, callback_data="whatsapp_clicked")],
-                    [InlineKeyboardButton("🔗 Join WhatsApp Group II", url="https://chat.whatsapp.com/Hy80h6Xd8olJg8PiVYpJRI")],
-                    [InlineKeyboardButton("🔗 Join Whatsapp Giveaway", url='https://chat.whatsapp.com/J1XbpqThdzzLJrCqweCsER')],
+                    [InlineKeyboardButton("🔗 Join Betting Group II", url="https://chat.whatsapp.com/Hy80h6Xd8olJg8PiVYpJRI")],
                     [InlineKeyboardButton("✅ Check My Subscription", callback_data="check_subscription")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -500,8 +499,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
                     [InlineKeyboardButton("🔗 Join Channel 1", url=f"{TELEGRAM_CHANNEL2_URL}")],
                     [InlineKeyboardButton("🔗 Join WhatsApp Channel I", url=WHATSAPP_LINK, callback_data="whatsapp_clicked")],
-                    [InlineKeyboardButton("🔗 Join WhatsApp Group II", url="https://chat.whatsapp.com/Hy80h6Xd8olJg8PiVYpJRI")],
-                    [InlineKeyboardButton("🔗 Join Whatsapp Giveaway", url='https://chat.whatsapp.com/J1XbpqThdzzLJrCqweCsER')],
+                    [InlineKeyboardButton("🔗 Join Betting Group II", url="https://chat.whatsapp.com/Hy80h6Xd8olJg8PiVYpJRI")],
                     [InlineKeyboardButton("✅ Check My Subscription", callback_data="check_subscription")]
                 ]
         reply_markup = InlineKeyboardMarkup(keyboard)
