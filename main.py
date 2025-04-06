@@ -801,7 +801,7 @@ async def show_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     webapp_url = f"{server_url}/withdrawal"
     
     # Create button for the web app
-    keyboard = [[InlineKeyboardButton("💸 Make Withdrawal", web_app=webapp_url)]]
+    keyboard = [[InlineKeyboardButton("💸 Make Withdrawal", web_app={"url": webapp_url})]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
@@ -2050,7 +2050,7 @@ def main():
     application.add_handler(broadcast_handler)
     
     application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
-    
+
     application.add_handler(CallbackQueryHandler(handle_callback_query))
     # Add this to your main function where you set up handlers
     application.add_handler(CallbackQueryHandler(refresh_leaderboard, pattern="^refresh_leaderboard$"))
