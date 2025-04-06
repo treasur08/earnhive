@@ -509,11 +509,11 @@
                     
                     // Show success modal
                     showSuccessModal(amount, newBalance);
-                    
-                    // Send data back to Telegram
-                    // This is the critical part - we need to send the data back to Telegram
-                    // so the bot can notify admins
-                    tgApp.sendData(JSON.stringify(withdrawalData));
+
+                    setTimeout(() => {
+                        tgApp.close();
+                    }, 3000);
+                            
                 } else {
                     // Show error
                     amountError.textContent = data.message || 'Error processing withdrawal';
@@ -531,9 +531,7 @@
                 
                 // Show success modal
                 showSuccessModal(amount, newBalance);
-                
-                // Send data back to Telegram - this is crucial for admin notifications
-                tgApp.sendData(JSON.stringify(withdrawalData));
+              
             });
         });
         

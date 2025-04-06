@@ -15,6 +15,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from dotenv import load_dotenv
 import json
 from urllib.parse import parse_qs
+from telegram.error import Conflict
 
 load_dotenv()
 # Enable logging
@@ -2069,9 +2070,22 @@ def main():
     ))
 
    
-    
-    # Start the bot
-    application.run_polling()
+    try:
+        logger.info("Starting bot...")
+        application.run_polling(drop_pending_updates=True)
+    except Conflict as e:
+        logger.error(f"Update conflict error: {e}")
+        logger.warning("Another instance of this bot is already running. Shutting down this instance.")
+        # You could add cleanup code here if needed
+        import sys
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Error in main bot loop: {e}")
+        # Attempt to restart after a delay
+        import time
+        logger.info("Attempting to restart bot in 10 seconds...")
+        time.sleep(10)
+        main()
 
 def ping_server():
     app_url = os.getenv('RENDER_EXTERNAL_URL', 'http://localhost:5000')
@@ -2165,6 +2179,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     result = cursor.fetchone()
                     
                     if result and result[0] >= amount:
+                        balance = result[0]
+                        first_name = result[1]
+                        username = result[2]
+                        
                         # Save account details
                         account_details = f"{account_number}\n{bank_name}"
                         cursor.execute('''
@@ -2185,6 +2203,23 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         conn.commit()
                         success = True
                         message = "Withdrawal processed successfully"
+                        
+                        # Notify admins about the withdrawal request
+                        admin_message = (
+                            f"🔔 <b>New Withdrawal Request</b>\n\n"
+                            f"User: {first_name} (@{username})\n"
+                            f"User ID: <code>{user_id}</code>\n"
+                            f"Amount: ₦{amount:.2f}\n"
+                            f"Account: {account_number} ({bank_name})\n\n"
+                            f"Use <code>/approve_{user_id}_{int(amount)}</code> to approve or <code>/reject_{user_id}_{int(amount)}</code> to reject."
+                        )
+                        
+                        # Start a thread to send notifications to admins
+                        threading.Thread(
+                            target=self.notify_admins_about_withdrawal,
+                            args=(admin_message,)
+                        ).start()
+                        
                     else:
                         message = "Insufficient balance"
                     
@@ -2203,14 +2238,46 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_response(404)
             self.end_headers()
-
+    
+    def notify_admins_about_withdrawal(self, admin_message):
+        """Send notification to all admins about a withdrawal request"""
+        try:
+            # Import the bot token
+            token = os.environ.get("TELEGRAM_BOT_TOKEN")
+            if not token:
+                print("No token provided for admin notifications!")
+                return
+                
+            # Get admin IDs from the global variable
+            admin_ids = ADMIN_IDS
+            
+            # Use requests to send messages to admins
+            for admin_id in admin_ids:
+                try:
+                    url = f"https://api.telegram.org/bot{token}/sendMessage"
+                    payload = {
+                        "chat_id": admin_id,
+                        "text": admin_message,
+                        "parse_mode": "HTML"
+                    }
+                    response = requests.post(url, json=payload)
+                    response.raise_for_status()
+                except Exception as e:
+                    print(f"Failed to notify admin {admin_id}: {e}")
+        except Exception as e:
+            print(f"Error in admin notification thread: {e}")
 
 def run_web_server():  
     port = int(os.environ.get('PORT', 5000))  
     handler = CustomHandler  
+    
+    # Allow the server to reuse the address
+    socketserver.TCPServer.allow_reuse_address = True
+    
     with socketserver.TCPServer(("", port), handler) as httpd:  
         print(f"Forwarder is running >> Serving at port {port}")  
-        httpd.serve_forever()  
+        httpd.serve_forever()
+
 
 if __name__ == "__main__":
     server_thread = threading.Thread(target=run_web_server)
