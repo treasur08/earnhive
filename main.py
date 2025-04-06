@@ -798,16 +798,7 @@ async def handle_withdrawal_callback(update: Update, context: ContextTypes.DEFAU
     
     if data.startswith("withdraw_"):
         
-        nigeria_tz = pytz.timezone('Africa/Lagos')
-        current_time = datetime.now(nigeria_tz)
-
-        if not (18 <= current_time.hour < 19):
-            await query.answer(
-                "🕒 Withdrawals are only available from 6 PM to 7 PM daily.\n\n"
-                "Keep referring to increase your earnings!",
-                show_alert=True
-            )
-            return
+        
         if data == "withdraw_custom":
             await query.edit_message_text(
                 "Please enter the amount you want to withdraw:",
@@ -892,14 +883,7 @@ async def process_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE,
         conn.close()
         return
     
-    check_passed, message = await check_referral_subscriptions(user_id, context)
-    if not check_passed:
-        await update.callback_query.edit_message_text(
-            message,
-            parse_mode="HTML",
-            disable_web_page_preview=True
-        )
-        return
+   
 
     balance = result[0]
     account_number = result[1]
@@ -968,17 +952,6 @@ async def process_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE,
 # Handle custom withdrawal amount
 async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "awaiting_withdrawal_amount" in context.user_data and context.user_data["awaiting_withdrawal_amount"]:
-        nigeria_tz = pytz.timezone('Africa/Lagos')
-        current_time = datetime.now(nigeria_tz)
-
-# Check if current time is between 6 PM (18:00) and 8 PM (20:00)
-        if not (18 <= current_time.hour < 19):
-            await update.message.reply_text(
-                "🕒 Withdrawals are only available from 6 PM to 7 PM daily.\n\n"
-                "Keep referring to increase your earnings!"
-            )
-            return
-        
        
         try:
             amount = float(update.message.text)
@@ -1003,14 +976,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 conn.close()
                 return
 
-            check_passed, message = await check_referral_subscriptions(user_id, context)
-            if not check_passed:
-                await update.callback_query.edit_message_text(
-                    message,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True
-                )
-                return
+           
             
             balance = result[0]
             account_number = result[1]
