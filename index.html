@@ -486,6 +486,8 @@
                 bank_name: bankSelect.value,
                 amount: amount
             };
+
+            console.log("Sending withdrawal data:", withdrawalData);
             
             // Calculate new balance
             const newBalance = userBalance - amount;
@@ -498,8 +500,12 @@
                 },
                 body: JSON.stringify(withdrawalData)
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log("Response status:", response.status);
+                return response.json();
+            })
             .then(data => {
+                console.log("Response data:", data);
                 hideLoading();
                 
                 if (data.status === 'success') {

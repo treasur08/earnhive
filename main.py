@@ -2156,89 +2156,126 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     
     def do_POST(self):
         if self.path.startswith('/process-withdrawal'):
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length).decode('utf-8')
-            data = json.loads(post_data)
-            
-            user_id = data.get('user_id')
-            account_number = data.get('account_number')
-            bank_name = data.get('bank_name')
-            amount = float(data.get('amount', 0))
-            
-            success = False
-            message = "Error processing withdrawal"
-            
-            if user_id and account_number and bank_name and amount:
-                try:
-                    # Process the withdrawal
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    
-                    # Check balance
-                    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
-                    result = cursor.fetchone()
-                    
-                    if result and result[0] >= amount:
-                        balance = result[0]
-                        first_name = result[1]
-                        username = result[2]
+            try:
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length).decode('utf-8')
+                print(f"Received POST data: {post_data}")
+                
+                data = json.loads(post_data)
+                
+                user_id = data.get('user_id')
+                account_number = data.get('account_number')
+                bank_name = data.get('bank_name')
+                amount = float(data.get('amount', 0))
+                
+                print(f"Processing withdrawal: user_id={user_id}, amount={amount}, bank={bank_name}")
+                
+                success = False
+                message = "Error processing withdrawal"
+                
+                if not all([user_id, account_number, bank_name, amount]):
+                    message = "Missing required fields"
+                    print(f"Missing fields: user_id={user_id}, account_number={account_number}, bank_name={bank_name}, amount={amount}")
+                else:
+                    try:
+                        # Process the withdrawal
+                        conn = get_db_connection()
+                        cursor = conn.cursor()
                         
-                        # Save account details
-                        account_details = f"{account_number}\n{bank_name}"
-                        cursor.execute('''
-                        UPDATE users SET account_number = %s WHERE user_id = %s
-                        ''', (account_details, user_id))
+                        # First check if user exists
+                        cursor.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
+                        if not cursor.fetchone():
+                            message = "User not found"
+                            print(f"User not found: {user_id}")
+                        else:
+                            # Check balance
+                            cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+                            balance_result = cursor.fetchone()
+                            
+                            if not balance_result:
+                                message = "Could not retrieve balance"
+                                print(f"Balance not found for user: {user_id}")
+                            else:
+                                balance = balance_result[0]
+                                
+                                if balance < amount:
+                                    message = "Insufficient balance"
+                                    print(f"Insufficient balance: {balance} < {amount}")
+                                else:
+                                    # Get user info for admin notification
+                                    cursor.execute("SELECT first_name, username FROM users WHERE user_id = %s", (user_id,))
+                                    user_info = cursor.fetchone()
+                                    first_name = user_info[0] if user_info and len(user_info) > 0 else "Unknown"
+                                    username = user_info[1] if user_info and len(user_info) > 1 else ""
+                                    
+                                    # Save account details
+                                    account_details = f"{account_number}\n{bank_name}"
+                                    cursor.execute('''
+                                    UPDATE users SET account_number = %s WHERE user_id = %s
+                                    ''', (account_details, user_id))
+                                    
+                                    # Create withdrawal request
+                                    cursor.execute('''
+                                    INSERT INTO withdrawals (user_id, amount)
+                                    VALUES (%s, %s)
+                                    ''', (user_id, amount))
+                                    
+                                    # Update user balance
+                                    cursor.execute('''
+                                    UPDATE users SET balance = balance - %s WHERE user_id = %s
+                                    ''', (amount, user_id))
+                                    
+                                    conn.commit()
+                                    success = True
+                                    message = "Withdrawal processed successfully"
+                                    print(f"Withdrawal successful: user_id={user_id}, amount={amount}")
+                                    
+                                    # Notify admins about the withdrawal request
+                                    admin_message = (
+                                        f"🔔 <b>New Withdrawal Request</b>\n\n"
+                                        f"User: {first_name} (@{username})\n"
+                                        f"User ID: <code>{user_id}</code>\n"
+                                        f"Amount: ₦{amount:.2f}\n"
+                                        f"Account: {account_number} ({bank_name})\n\n"
+                                        f"Use <code>/approve_{user_id}_{int(amount)}</code> to approve or <code>/reject_{user_id}_{int(amount)}</code> to reject."
+                                    )
+                                    
+                                    # Start a thread to send notifications to admins
+                                    threading.Thread(
+                                        target=self.notify_admins_about_withdrawal,
+                                        args=(admin_message,)
+                                    ).start()
                         
-                        # Create withdrawal request
-                        cursor.execute('''
-                        INSERT INTO withdrawals (user_id, amount)
-                        VALUES (%s, %s)
-                        ''', (user_id, amount))
-                        
-                        # Update user balance
-                        cursor.execute('''
-                        UPDATE users SET balance = balance - %s WHERE user_id = %s
-                        ''', (amount, user_id))
-                        
-                        conn.commit()
-                        success = True
-                        message = "Withdrawal processed successfully"
-                        
-                        # Notify admins about the withdrawal request
-                        admin_message = (
-                            f"🔔 <b>New Withdrawal Request</b>\n\n"
-                            f"User: {first_name} (@{username})\n"
-                            f"User ID: <code>{user_id}</code>\n"
-                            f"Amount: ₦{amount:.2f}\n"
-                            f"Account: {account_number} ({bank_name})\n\n"
-                            f"Use <code>/approve_{user_id}_{int(amount)}</code> to approve or <code>/reject_{user_id}_{int(amount)}</code> to reject."
-                        )
-                        
-                        # Start a thread to send notifications to admins
-                        threading.Thread(
-                            target=self.notify_admins_about_withdrawal,
-                            args=(admin_message,)
-                        ).start()
-                        
-                    else:
-                        message = "Insufficient balance"
-                    
-                    conn.close()
-                except Exception as e:
-                    print(f"Error processing withdrawal: {e}")
-                    message = f"Error: {str(e)}"
-            
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({
-                'status': 'success' if success else 'error',
-                'message': message
-            }).encode())
+                        conn.close()
+                    except Exception as e:
+                        print(f"Database error processing withdrawal: {e}")
+                        message = f"Database error: {str(e)}"
+                
+                response_data = {
+                    'status': 'success' if success else 'error',
+                    'message': message
+                }
+                print(f"Sending response: {response_data}")
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(response_data).encode())
+                
+            except Exception as e:
+                print(f"Error in POST handler: {e}")
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'status': 'error',
+                    'message': f"Server error: {str(e)}"
+                }).encode())
         else:
             self.send_response(404)
             self.end_headers()
-    
+
+
     def notify_admins_about_withdrawal(self, admin_message):
         """Send notification to all admins about a withdrawal request"""
         try:
@@ -2261,6 +2298,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         "parse_mode": "HTML"
                     }
                     response = requests.post(url, json=payload)
+                    print(f"Admin notification response for {admin_id}: {response.status_code}")
                     response.raise_for_status()
                 except Exception as e:
                     print(f"Failed to notify admin {admin_id}: {e}")
