@@ -798,7 +798,7 @@ async def show_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Get the server URL from environment variable or use a default
     server_url = os.getenv('RENDER_EXTERNAL_URL', 'http://localhost:5000')
-    webapp_url = f"{server_url}/withdrawal"
+    webapp_url = f"{server_url}/withdrawal?user_id={user_id}&balance={balance}"
     
     # Create button for the web app
     keyboard = [[InlineKeyboardButton("💸 Make Withdrawal", web_app={"url": webapp_url})]]
@@ -812,6 +812,7 @@ async def show_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+# Add a new handler for web app data
 # Add a new handler for web app data
 async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Get the data sent from the web app
@@ -2092,17 +2093,48 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()  
             self.wfile.write(b"<!doctype html><html><head><title>Server Status</title></head>")  
             self.wfile.write(b"<body><h1>Bot is running...</h1></body></html>")
-        elif self.path == '/withdrawal':
+        elif self.path.startswith('/withdrawal'):
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
             
-            # Read the withdrawal.html file
+            # Read the index.html file
             try:
                 with open('index.html', 'rb') as file:
                     self.wfile.write(file.read())
             except FileNotFoundError:
                 self.wfile.write(b"<!doctype html><html><body><h1>Withdrawal page not found</h1></body></html>")
+        elif self.path.startswith('/check-balance'):
+            # Parse query parameters to get user_id
+            from urllib.parse import urlparse, parse_qs
+            query = parse_qs(urlparse(self.path).query)
+            user_id = query.get('user_id', [''])[0]
+            
+            balance = 0
+            if user_id:
+                try:
+                    # Get user balance from database
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+                    result = cursor.fetchone()
+                    conn.close()
+                    
+                    if result:
+                        balance = result[0]
+                except Exception as e:
+                    print(f"Error getting user balance: {e}")
+            
+            # Send balance as JSON
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"balance": balance}).encode())
+        elif self.path.startswith('/process-withdrawal'):
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "success"}).encode())
         else:
             self.send_response(404)
             self.send_header("Content-type", "text/html")
@@ -2110,20 +2142,69 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(b"<!doctype html><html><body><h1>404 Not Found</h1></body></html>")
     
     def do_POST(self):
-        if self.path == '/process-withdrawal':
+        if self.path.startswith('/process-withdrawal'):
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length).decode('utf-8')
             data = json.loads(post_data)
             
+            user_id = data.get('user_id')
+            account_number = data.get('account_number')
+            bank_name = data.get('bank_name')
+            amount = float(data.get('amount', 0))
             
+            success = False
+            message = "Error processing withdrawal"
+            
+            if user_id and account_number and bank_name and amount:
+                try:
+                    # Process the withdrawal
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    
+                    # Check balance
+                    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+                    result = cursor.fetchone()
+                    
+                    if result and result[0] >= amount:
+                        # Save account details
+                        account_details = f"{account_number}\n{bank_name}"
+                        cursor.execute('''
+                        UPDATE users SET account_number = %s WHERE user_id = %s
+                        ''', (account_details, user_id))
+                        
+                        # Create withdrawal request
+                        cursor.execute('''
+                        INSERT INTO withdrawals (user_id, amount)
+                        VALUES (%s, %s)
+                        ''', (user_id, amount))
+                        
+                        # Update user balance
+                        cursor.execute('''
+                        UPDATE users SET balance = balance - %s WHERE user_id = %s
+                        ''', (amount, user_id))
+                        
+                        conn.commit()
+                        success = True
+                        message = "Withdrawal processed successfully"
+                    else:
+                        message = "Insufficient balance"
+                    
+                    conn.close()
+                except Exception as e:
+                    print(f"Error processing withdrawal: {e}")
+                    message = f"Error: {str(e)}"
             
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({'status': 'success'}).encode())
+            self.wfile.write(json.dumps({
+                'status': 'success' if success else 'error',
+                'message': message
+            }).encode())
         else:
             self.send_response(404)
             self.end_headers()
+
 
 def run_web_server():  
     port = int(os.environ.get('PORT', 5000))  
