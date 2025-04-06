@@ -261,7 +261,7 @@
 <body>
     <div class="container animate-fadeIn" id="form-container">
         <div class="logo-container">
-            <img src="https://placeholder.com/120" alt="EarnHive Logo" class="logo" id="logo-image">
+            <img src="earnhive.jpg" alt="EarnHive Logo" class="logo" id="logo-image">
         </div>
         
         <h1 class="animate-slideUp">Withdrawal Request</h1>
@@ -353,7 +353,7 @@
         let userBalance = 0;
         
         // Set logo image (replace with your actual logo URL)
-        logoImage.src = "earnhive.jpg";
+        logoImage.src = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/earnhive.jpg-Ui2lTIFBrOVAFF0x9DnosWa0LfAPTA.jpeg";
         
         // Function to format currency
         function formatCurrency(amount) {
@@ -511,6 +511,8 @@
                     showSuccessModal(amount, newBalance);
                     
                     // Send data back to Telegram
+                    // This is the critical part - we need to send the data back to Telegram
+                    // so the bot can notify admins
                     tgApp.sendData(JSON.stringify(withdrawalData));
                 } else {
                     // Show error
@@ -522,7 +524,7 @@
                 hideLoading();
                 console.error('Error:', error);
                 
-                // Fallback to client-side processing if server request fails
+                // Even if the server request fails, we still want to send data to Telegram
                 // Update the balance display
                 balanceDisplay.textContent = formatCurrency(newBalance);
                 userBalance = newBalance;
@@ -530,7 +532,7 @@
                 // Show success modal
                 showSuccessModal(amount, newBalance);
                 
-                // Send data back to Telegram
+                // Send data back to Telegram - this is crucial for admin notifications
                 tgApp.sendData(JSON.stringify(withdrawalData));
             });
         });
