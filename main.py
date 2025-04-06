@@ -812,8 +812,6 @@ async def show_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# Add a new handler for web app data
-# Add a new handler for web app data
 async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Get the data sent from the web app
     data = json.loads(update.effective_message.web_app_data.data)
@@ -903,6 +901,7 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
         except Exception as e:
             logger.error(f"Failed to notify admin {admin_id}: {e}")
+
 
 # Handle withdrawal callback
 async def handle_withdrawal_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
