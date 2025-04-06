@@ -5,98 +5,279 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EarnHive Withdrawal</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
     <style>
-        body {
-            font-family: 'Roboto', sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-            color: #333;
+        :root {
+            --primary-color: #0088cc;
+            --secondary-color: #006699;
+            --success-color: #4CAF50;
+            --background-color: #f5f5f5;
+            --card-color: white;
+            --text-color: #333;
+            --border-radius: 10px;
+            --box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            --transition: all 0.3s ease;
         }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
         .container {
+            width: 90%;
             max-width: 500px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
+            margin: 20px auto;
+            background: var(--card-color);
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--box-shadow);
+            transition: var(--transition);
+            position: relative;
+        }
+        
+        .logo-container {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+        }
+        
+        .logo {
+            max-width: 120px;
+            height: auto;
+            border-radius: 50%;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
+        
         h1 {
             text-align: center;
-            color: #0088cc;
+            color: var(--primary-color);
             margin-bottom: 20px;
+            font-weight: 600;
         }
+        
+        .balance-card {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border-radius: var(--border-radius);
+            padding: 15px;
+            margin-bottom: 25px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .balance-card::before {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            transform: rotate(30deg);
+        }
+        
+        .balance-label {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+        
+        .balance-amount {
+            font-size: 28px;
+            font-weight: bold;
+            margin: 0;
+        }
+        
         .form-group {
             margin-bottom: 20px;
         }
+        
         label {
             display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
         }
+        
         input, select {
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             border: 1px solid #ddd;
-            border-radius: 5px;
+            border-radius: 8px;
             font-size: 16px;
             box-sizing: border-box;
+            transition: var(--transition);
+            background-color: #f9f9f9;
         }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(0,136,204,0.2);
+            background-color: white;
+        }
+        
         button {
-            background-color: #0088cc;
+            background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 12px 20px;
-            border-radius: 5px;
+            padding: 15px 20px;
+            border-radius: 8px;
             font-size: 16px;
             cursor: pointer;
             width: 100%;
             font-weight: bold;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
         }
+        
         button:hover {
-            background-color: #006699;
+            background-color: var(--secondary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,136,204,0.3);
         }
-        .balance {
-            text-align: center;
-            font-size: 18px;
-            margin-bottom: 20px;
-            padding: 10px;
-            background-color: #f0f8ff;
-            border-radius: 5px;
+        
+        button:active {
+            transform: translateY(0);
         }
-        .success-container {
-            display: none;
-            text-align: center;
-            padding: 30px;
-        }
-        .success-icon {
-            font-size: 80px;
-            color: #4CAF50;
-            margin-bottom: 20px;
-        }
+        
         .error {
-            color: red;
+            color: #e74c3c;
             font-size: 14px;
             margin-top: 5px;
+            animation: shake 0.5s ease-in-out;
         }
+        
         .banks-list {
             max-height: 200px;
             overflow-y: auto;
         }
+        
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: var(--border-radius);
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            box-shadow: var(--box-shadow);
+            position: relative;
+        }
+        
+        .success-icon {
+            font-size: 70px;
+            color: var(--success-color);
+            margin-bottom: 20px;
+            display: block;
+        }
+        
+        .close-modal {
+            margin-top: 20px;
+            background-color: var(--success-color);
+        }
+        
+        .close-modal:hover {
+            background-color: #3d9140;
+        }
+        
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .animate-fadeIn {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        .animate-slideUp {
+            animation: slideUp 0.5s ease-in-out;
+        }
+        
+        .animate-pulse {
+            animation: pulse 1.5s infinite;
+        }
+        
+        /* Loading spinner */
+        .spinner {
+            display: none;
+            width: 40px;
+            height: 40px;
+            margin: 20px auto;
+            border: 4px solid rgba(0,0,0,0.1);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
-    <div class="container" id="form-container">
-        <h1>Withdrawal Request</h1>
-        <div class="balance" id="balance-display">
-            Your Balance: ₦<span id="user-balance">0.00</span>
+    <div class="container animate-fadeIn" id="form-container">
+        <div class="logo-container">
+            <img src="https://placeholder.com/120" alt="EarnHive Logo" class="logo" id="logo-image">
         </div>
-        <form id="withdrawal-form">
+        
+        <h1 class="animate-slideUp">Withdrawal Request</h1>
+        
+        <div class="balance-card animate-slideUp">
+            <div class="balance-label">Your Available Balance</div>
+            <div class="balance-amount">₦<span id="user-balance">0.00</span></div>
+        </div>
+        
+        <form id="withdrawal-form" class="animate-slideUp">
             <div class="form-group">
                 <label for="account-number">Account Number (10 digits)</label>
                 <input type="text" id="account-number" pattern="[0-9]{10}" maxlength="10" required>
                 <div class="error" id="account-error"></div>
             </div>
+            
             <div class="form-group">
                 <label for="bank-name">Bank Name</label>
                 <select id="bank-name" required>
@@ -119,22 +300,30 @@
                     <option value="Zenith Bank">Zenith Bank</option>
                 </select>
             </div>
+            
             <div class="form-group">
                 <label for="amount">Amount (₦)</label>
                 <input type="number" id="amount" min="700" required>
                 <div class="error" id="amount-error"></div>
             </div>
+            
             <button type="submit" id="submit-btn">Submit Withdrawal</button>
         </form>
+        
+        <div class="spinner" id="loading-spinner"></div>
     </div>
 
-    <div class="success-container" id="success-container">
-        <div class="success-icon">✅</div>
-        <h2>Withdrawal Submitted!</h2>
-        <p>Your withdrawal request has been submitted successfully.</p>
-        <p>Amount: ₦<span id="success-amount">0.00</span></p>
-        <p>We'll process your request shortly.</p>
-        <button id="close-btn">Close</button>
+    <!-- Success Modal -->
+    <div class="modal" id="success-modal">
+        <div class="modal-content animate-fadeIn">
+            <span class="success-icon animate-pulse">✅</span>
+            <h2>Withdrawal Successful!</h2>
+            <p>Your withdrawal request has been submitted successfully.</p>
+            <p>Amount: ₦<span id="success-amount">0.00</span></p>
+            <p>New Balance: ₦<span id="new-balance">0.00</span></p>
+            <p>We'll process your request shortly.</p>
+            <button id="close-modal-btn" class="close-modal">Close</button>
+        </div>
     </div>
 
     <script>
@@ -149,22 +338,57 @@
         const amountInput = document.getElementById('amount');
         const balanceDisplay = document.getElementById('user-balance');
         const formContainer = document.getElementById('form-container');
-        const successContainer = document.getElementById('success-container');
+        const successModal = document.getElementById('success-modal');
         const successAmount = document.getElementById('success-amount');
+        const newBalanceDisplay = document.getElementById('new-balance');
         const accountError = document.getElementById('account-error');
         const amountError = document.getElementById('amount-error');
-        const closeBtn = document.getElementById('close-btn');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const logoImage = document.getElementById('logo-image');
         
         // Get user_id and balance from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const userId = urlParams.get('user_id');
-        const balanceParam = urlParams.get('balance');
+        let userBalance = 0;
         
-        if (balanceParam) {
-            balanceDisplay.textContent = parseFloat(balanceParam).toFixed(2);
-        } else {
-            // Default to a placeholder
-            balanceDisplay.textContent = "0.00";
+        // Set logo image
+        logoImage.src = "earnhive.jpg";
+        
+        // Function to format currency
+        function formatCurrency(amount) {
+            return parseFloat(amount).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+        }
+        
+        // Function to show success modal
+        function showSuccessModal(amount, newBalance) {
+            successAmount.textContent = formatCurrency(amount);
+            newBalanceDisplay.textContent = formatCurrency(newBalance);
+            successModal.style.display = 'flex';
+            
+            // Add animation classes
+            const modalContent = successModal.querySelector('.modal-content');
+            modalContent.classList.add('animate-slideUp');
+        }
+        
+        // Function to close modal
+        function closeModal() {
+            successModal.style.display = 'none';
+            tgApp.close();
+        }
+        
+        // Function to show loading spinner
+        function showLoading() {
+            loadingSpinner.style.display = 'block';
+            form.style.opacity = '0.5';
+            form.style.pointerEvents = 'none';
+        }
+        
+        // Function to hide loading spinner
+        function hideLoading() {
+            loadingSpinner.style.display = 'none';
+            form.style.opacity = '1';
+            form.style.pointerEvents = 'auto';
         }
         
         // If we have a user_id, fetch the latest balance
@@ -173,7 +397,8 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.balance !== undefined) {
-                        balanceDisplay.textContent = parseFloat(data.balance).toFixed(2);
+                        userBalance = parseFloat(data.balance);
+                        balanceDisplay.textContent = formatCurrency(userBalance);
                     }
                 })
                 .catch(error => {
@@ -186,8 +411,25 @@
             this.value = this.value.replace(/[^0-9]/g, '');
             if (this.value.length > 0 && this.value.length !== 10) {
                 accountError.textContent = 'Account number must be 10 digits';
+                accountError.classList.add('animate-shake');
+                setTimeout(() => {
+                    accountError.classList.remove('animate-shake');
+                }, 500);
             } else {
                 accountError.textContent = '';
+            }
+        });
+        
+        // Validate amount
+        amountInput.addEventListener('input', function() {
+            const amount = parseFloat(this.value);
+            
+            if (amount < 700) {
+                amountError.textContent = 'Minimum withdrawal amount is ₦700';
+            } else if (amount > userBalance) {
+                amountError.textContent = 'Amount exceeds your available balance';
+            } else {
+                amountError.textContent = '';
             }
         });
         
@@ -202,22 +444,27 @@
             // Validate account number
             if (accountInput.value.length !== 10) {
                 accountError.textContent = 'Account number must be 10 digits';
+                accountError.classList.add('animate-shake');
                 return;
             }
             
             // Validate amount
             const amount = parseFloat(amountInput.value);
-            const balance = parseFloat(balanceDisplay.textContent);
             
             if (amount < 700) {
                 amountError.textContent = 'Minimum withdrawal amount is ₦700';
+                amountError.classList.add('animate-shake');
                 return;
             }
             
-            if (amount > balance) {
+            if (amount > userBalance) {
                 amountError.textContent = 'Amount exceeds your available balance';
+                amountError.classList.add('animate-shake');
                 return;
             }
+            
+            // Show loading
+            showLoading();
             
             // Prepare data to send back to Telegram
             const withdrawalData = {
@@ -227,18 +474,33 @@
                 amount: amount
             };
             
-            // Send data back to Telegram
-            tgApp.sendData(JSON.stringify(withdrawalData));
+            // Calculate new balance
+            const newBalance = userBalance - amount;
             
-            // Show success message
-            formContainer.style.display = 'none';
-            successContainer.style.display = 'block';
-            successAmount.textContent = amount.toFixed(2);
+            // Simulate API call (replace with actual API call)
+            setTimeout(() => {
+                hideLoading();
+                
+                // Update the balance display
+                balanceDisplay.textContent = formatCurrency(newBalance);
+                userBalance = newBalance;
+                
+                // Show success modal
+                showSuccessModal(amount, newBalance);
+                
+                // Send data back to Telegram
+                tgApp.sendData(JSON.stringify(withdrawalData));
+            }, 1500);
         });
         
-        // Close button
-        closeBtn.addEventListener('click', function() {
-            tgApp.close();
+        // Close modal button
+        closeModalBtn.addEventListener('click', closeModal);
+        
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            if (event.target === successModal) {
+                closeModal();
+            }
         });
     </script>
 </body>
