@@ -352,7 +352,7 @@
         const userId = urlParams.get('user_id');
         let userBalance = 0;
         
-        // Set logo image
+        // Set logo image (replace with your actual logo URL)
         logoImage.src = "earnhive.jpg";
         
         // Function to format currency
@@ -393,17 +393,30 @@
         
         // If we have a user_id, fetch the latest balance
         if (userId) {
+            // First try to get balance from URL parameter
+            const balanceParam = urlParams.get('balance');
+            if (balanceParam) {
+                userBalance = parseFloat(balanceParam);
+                balanceDisplay.textContent = formatCurrency(userBalance);
+            }
+            
+            // Then fetch the latest balance from the API
             fetch(`/check-balance?user_id=${userId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.balance !== undefined) {
                         userBalance = parseFloat(data.balance);
                         balanceDisplay.textContent = formatCurrency(userBalance);
+                        console.log("Balance fetched successfully:", userBalance);
+                    } else {
+                        console.error("Balance data is undefined");
                     }
                 })
                 .catch(error => {
                     console.error('Error fetching balance:', error);
                 });
+        } else {
+            console.error("No user_id provided in URL parameters");
         }
         
         // Validate account number (10 digits only)
@@ -477,10 +490,39 @@
             // Calculate new balance
             const newBalance = userBalance - amount;
             
-            // Simulate API call (replace with actual API call)
-            setTimeout(() => {
+            // Send data to server
+            fetch('/process-withdrawal', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(withdrawalData)
+            })
+            .then(response => response.json())
+            .then(data => {
                 hideLoading();
                 
+                if (data.status === 'success') {
+                    // Update the balance display
+                    balanceDisplay.textContent = formatCurrency(newBalance);
+                    userBalance = newBalance;
+                    
+                    // Show success modal
+                    showSuccessModal(amount, newBalance);
+                    
+                    // Send data back to Telegram
+                    tgApp.sendData(JSON.stringify(withdrawalData));
+                } else {
+                    // Show error
+                    amountError.textContent = data.message || 'Error processing withdrawal';
+                    amountError.classList.add('animate-shake');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                console.error('Error:', error);
+                
+                // Fallback to client-side processing if server request fails
                 // Update the balance display
                 balanceDisplay.textContent = formatCurrency(newBalance);
                 userBalance = newBalance;
@@ -490,7 +532,7 @@
                 
                 // Send data back to Telegram
                 tgApp.sendData(JSON.stringify(withdrawalData));
-            }, 1500);
+            });
         });
         
         // Close modal button
