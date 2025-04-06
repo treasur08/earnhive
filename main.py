@@ -13,6 +13,9 @@ import time
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, ConversationHandler, CallbackContext
 from dotenv import load_dotenv
+import json
+from urllib.parse import parse_qs
+
 load_dotenv()
 # Enable logging
 logging.basicConfig(
@@ -759,34 +762,146 @@ async def show_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = cursor.fetchone()
     conn.close()
     
-    if not result or not result[0]:
-        await update.message.reply_text(
-            "⚠️ You need to set your account details before withdrawing.\n\n"
-            "Go to ⚙️ Settings to set your account details."
-        )
-        return
+   
     
     account_number = result[0]
     balance = result[1]
+
+    server_url = os.getenv('RENDER_EXTERNAL_URL', 'http://localhost:5000')
+    webapp_url = f"{server_url}/withdrawal"
     
     # Create numeric keyboard for withdrawal amounts
-    keyboard = [
-        [InlineKeyboardButton("₦500", callback_data="withdraw_500"),
-         InlineKeyboardButton("₦1000", callback_data="withdraw_1000")],
-        [InlineKeyboardButton("₦2000", callback_data="withdraw_2000"),
-         InlineKeyboardButton("₦5000", callback_data="withdraw_5000")],
-        [InlineKeyboardButton("Custom Amount", callback_data="withdraw_custom")]
-    ]
+    keyboard = [[InlineKeyboardButton("💸 Make Withdrawal", web_app=webapp_url)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        f"💸 *Withdrawal*\n\n"
-        f"Your balance: ₦{balance:.2f}\n"
-        f"Account details:\n {account_number}\n\n"
-        f"Select withdrawal amount:",
+        f"💰 *Withdrawal*\n\n"
+        f"Your balance: ₦{balance:.2f}\n\n"
+        f"Click the button below to make a withdrawal request:",
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
+
+# Show withdrawal menu
+@subscription_required
+async def show_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Check if user has set account number
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT account_number, balance FROM users WHERE user_id = %s", (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    balance = result[1] if result else 0
+    
+    # Get the server URL from environment variable or use a default
+    server_url = os.getenv('RENDER_EXTERNAL_URL', 'http://localhost:5000')
+    webapp_url = f"{server_url}/withdrawal"
+    
+    # Create button for the web app
+    keyboard = [[InlineKeyboardButton("💸 Make Withdrawal", web_app=webapp_url)]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        f"💰 *Withdrawal*\n\n"
+        f"Your balance: ₦{balance:.2f}\n\n"
+        f"Click the button below to make a withdrawal request:",
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+# Add a new handler for web app data
+async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Get the data sent from the web app
+    data = json.loads(update.effective_message.web_app_data.data)
+    user_id = update.effective_user.id
+    
+    account_number = data.get('account_number')
+    bank_name = data.get('bank_name')
+    amount = float(data.get('amount', 0))
+    
+    # Process the withdrawal
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Check balance
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    result = cursor.fetchone()
+    
+    if not result:
+        await update.message.reply_text("Error retrieving your account information.")
+        conn.close()
+        return
+    
+    balance = result[0]
+    
+    if amount < MIN_WITHDRAWAL:
+        await update.message.reply_text(
+            f"⚠️ Minimum withdrawal amount is ₦{MIN_WITHDRAWAL}.\n\n"
+            f"Your requested amount: ₦{amount:.2f}"
+        )
+        conn.close()
+        return
+    
+    if balance < amount:
+        await update.message.reply_text(
+            f"⚠️ Insufficient balance.\n\n"
+            f"Your balance: ₦{balance:.2f}\n"
+            f"Requested amount: ₦{amount:.2f}"
+        )
+        conn.close()
+        return
+    
+    # Save account details if they've changed
+    account_details = f"{account_number}\n{bank_name}"
+    cursor.execute('''
+    UPDATE users SET account_number = %s WHERE user_id = %s
+    ''', (account_details, user_id))
+    
+    # Create withdrawal request
+    cursor.execute('''
+    INSERT INTO withdrawals (user_id, amount)
+    VALUES (%s, %s)
+    ''', (user_id, amount))
+    
+    # Update user balance
+    cursor.execute('''
+    UPDATE users SET balance = balance - %s WHERE user_id = %s
+    ''', (amount, user_id))
+    
+    conn.commit()
+    conn.close()
+    
+    # Notify user
+    await update.message.reply_text(
+        f"✅ Withdrawal request submitted!\n\n"
+        f"Amount: ₦{amount:.2f}\n"
+        f"Account: {account_number} ({bank_name})\n\n"
+        f"Your request is being processed. You will be notified once completed."
+    )
+    
+    # Notify admins
+    user = update.effective_user
+    admin_message = (
+        f"🔔 <b>New Withdrawal Request</b>\n\n"
+        f"User: {user.first_name} (@{user.username})\n"
+        f"User ID: <code>{user_id}</code>\n"
+        f"Amount: ₦{amount:.2f}\n"
+        f"Account: {account_number} ({bank_name})\n\n"
+        f"Use <code>/approve_{user_id}_{int(amount)}</code> to approve or <code>/reject_{user_id}_{int(amount)}</code> to reject."
+    )
+    
+    for admin_id in ADMIN_IDS:
+        try:
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=admin_message,
+                parse_mode="html"
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify admin {admin_id}: {e}")
 
 # Handle withdrawal callback
 async def handle_withdrawal_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1934,6 +2049,8 @@ def main():
     )
     application.add_handler(broadcast_handler)
     
+    application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
+    
     application.add_handler(CallbackQueryHandler(handle_callback_query))
     # Add this to your main function where you set up handlers
     application.add_handler(CallbackQueryHandler(refresh_leaderboard, pattern="^refresh_leaderboard$"))
@@ -1968,14 +2085,45 @@ def ping_server():
 
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):  
-    def do_GET(self):  
-        self.send_response(200)  
-        self.send_header("Content-type", "text/html")  
-        self.end_headers()  
-
-        self.wfile.write(b"<!doctype html><html><head><title>Server Status</title></head>")  
-        self.wfile.write(b"<body><h1>Bot is running...</h1></body></html>")  
-
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)  
+            self.send_header("Content-type", "text/html")  
+            self.end_headers()  
+            self.wfile.write(b"<!doctype html><html><head><title>Server Status</title></head>")  
+            self.wfile.write(b"<body><h1>Bot is running...</h1></body></html>")
+        elif self.path == '/withdrawal':
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            
+            # Read the withdrawal.html file
+            try:
+                with open('index.html', 'rb') as file:
+                    self.wfile.write(file.read())
+            except FileNotFoundError:
+                self.wfile.write(b"<!doctype html><html><body><h1>Withdrawal page not found</h1></body></html>")
+        else:
+            self.send_response(404)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"<!doctype html><html><body><h1>404 Not Found</h1></body></html>")
+    
+    def do_POST(self):
+        if self.path == '/process-withdrawal':
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length).decode('utf-8')
+            data = json.loads(post_data)
+            
+            
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'status': 'success'}).encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
 
 def run_web_server():  
     port = int(os.environ.get('PORT', 5000))  
