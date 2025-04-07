@@ -1,28 +1,74 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EarnHive Withdrawal</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --primary-color: #0088cc;
-            --secondary-color: #006699;
-            --success-color: #4CAF50;
-            --background-color: #f5f5f5;
-            --card-color: white;
-            --text-color: #333;
-            --border-radius: 10px;
-            --box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            --transition: all 0.3s ease;
+            /* Gold gradient colors from logo */
+            --gold-light: #d4af37;
+            --gold-medium: #b8860b;
+            --gold-dark: #85754e;
+            
+            /* Light theme */
+            --primary-color-light: var(--gold-medium);
+            --secondary-color-light: var(--gold-dark);
+            --background-color-light: #f8f8f8;
+            --card-color-light: #ffffff9f;
+            --text-color-light: #333333;
+            --input-bg-light: #f0f0f0;
+            --success-color-light: #4CAF50;
+            
+            /* Dark theme */
+            --primary-color-dark: var(--gold-light);
+            --secondary-color-dark: var(--gold-medium);
+            --background-color-dark: #121212;
+            --card-color-dark: #1e1e1e00;
+            --text-color-dark: #f0f0f0;
+            --input-bg-dark: #2a2a2a;
+            --success-color-dark: #5CDF60;
+            
+            /* Common */
+            --border-radius: 12px;
+            --box-shadow-light: 0 8px 20px rgba(0,0,0,0.1);
+            --box-shadow-dark: 0 8px 20px rgba(0,0,0,0.3);
+            --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        
+        [data-theme="light"] {
+            --primary-color: var(--primary-color-light);
+            --secondary-color: var(--secondary-color-light);
+            --background-color: var(--background-color-light);
+            --card-color: var(--card-color-light);
+            --text-color: var(--text-color-light);
+            --input-bg: var(--input-bg-light);
+            --success-color: var(--success-color-light);
+            --box-shadow: var(--box-shadow-light);
+        }
+        
+        [data-theme="dark"] {
+            --primary-color: var(--primary-color-dark);
+            --secondary-color: var(--secondary-color-dark);
+            --background-color: var(--background-color-dark);
+            --card-color: var(--card-color-dark);
+            --text-color: var(--text-color-dark);
+            --input-bg: var(--input-bg-dark);
+            --success-color: var(--success-color-dark);
+            --box-shadow: var(--box-shadow-dark);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
             background-color: var(--background-color);
             color: var(--text-color);
             min-height: 100vh;
@@ -30,6 +76,35 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            transition: var(--transition);
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        #particles-js {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: -1;
+        }
+        
+        .theme-toggle {
+            position: absolute;
+            top: 20px;
+            right: 200px;
+            background: none;
+            border: none;
+            color: var(--primary-color);
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 100;
+            transition: transform 0.3s ease;
+        }
+        
+        .theme-toggle:hover {
+            transform: rotate(30deg);
         }
         
         .container {
@@ -38,15 +113,17 @@
             margin: 20px auto;
             background: var(--card-color);
             border-radius: var(--border-radius);
-            padding: 25px;
+            padding: 30px;
             box-shadow: var(--box-shadow);
             transition: var(--transition);
             position: relative;
+            backdrop-filter: blur(1px);
+            border: 1px solid rgba(var(--primary-color), 0.1);
         }
         
         .logo-container {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             padding: 10px;
         }
         
@@ -54,26 +131,37 @@
             max-width: 120px;
             height: auto;
             border-radius: 50%;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: transform 0.5s ease;
+        }
+        
+        .logo:hover {
+            transform: scale(1.05);
         }
         
         h1 {
             text-align: center;
-            color: var(--primary-color);
-            margin-bottom: 20px;
-            font-weight: 600;
+            background: linear-gradient(135deg, var(--gold-light), var(--gold-dark));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 25px;
+            font-weight: 700;
+            font-size: 28px;
+            letter-spacing: 0.5px;
         }
         
         .balance-card {
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-            color: white;
+            background: linear-gradient(135deg, var(--gold-light), var(--gold-dark));
+            color: #fff;
             border-radius: var(--border-radius);
-            padding: 15px;
-            margin-bottom: 25px;
+            padding: 20px;
+            margin-bottom: 30px;
             text-align: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
             position: relative;
             overflow: hidden;
+            transform: translateZ(0);
         }
         
         .balance-card::before {
@@ -83,86 +171,158 @@
             left: -50%;
             width: 200%;
             height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%);
             transform: rotate(30deg);
+            pointer-events: none;
         }
         
         .balance-label {
-            font-size: 14px;
+            font-size: 16px;
             opacity: 0.9;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
         .balance-amount {
-            font-size: 28px;
+            font-size: 32px;
             font-weight: bold;
             margin: 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
+            position: relative;
         }
         
         label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #555;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 15px;
         }
         
         input, select {
             width: 100%;
-            padding: 14px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            padding: 16px;
+            border: 2px solid rgba(var(--primary-color), 0.3);
+            border-radius: var(--border-radius);
             font-size: 16px;
-            box-sizing: border-box;
+            background-color: var(--input-bg);
+            color: var(--text-color);
             transition: var(--transition);
-            background-color: #f9f9f9;
+            box-sizing: border-box;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+        }
+        
+        /* Custom select arrow */
+        .select-wrapper {
+            position: relative;
+        }
+        
+        .select-wrapper::after {
+            content: "\f107";
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary-color);
+            pointer-events: none;
+            font-size: 20px;
         }
         
         input:focus, select:focus {
             outline: none;
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 2px rgba(0,136,204,0.2);
-            background-color: white;
+            box-shadow: 0 0 0 3px rgba(var(--primary-color), 0.2);
+        }
+        
+        .amount-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .amount-wrapper input {
+            flex: 1;
+            padding-right: 70px; /* Make room for the button */
+        }
+
+        .max-button {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: linear-gradient(135deg, var(--gold-light), var(--gold-dark));
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: auto;
+        }
+        
+        .max-button:hover {
+            transform: translateY(-50%) scale(1.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
         
         button {
-            background-color: var(--primary-color);
+            background: linear-gradient(135deg, var(--gold-light), var(--gold-dark));
             color: white;
             border: none;
-            padding: 15px 20px;
-            border-radius: 8px;
-            font-size: 16px;
+            padding: 16px 20px;
+            border-radius: var(--border-radius);
+            font-size: 18px;
             cursor: pointer;
             width: 100%;
             font-weight: bold;
-            transition: var(--transition);
+            transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: all 0.6s ease;
+        }
+        
+        button:hover::before {
+            left: 100%;
         }
         
         button:hover {
-            background-color: var(--secondary-color);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,136,204,0.3);
+            transform: translateY(-3px);
+            box-shadow: 0 7px 15px rgba(0,0,0,0.2);
         }
         
         button:active {
-            transform: translateY(0);
+            transform: translateY(-1px);
         }
         
         .error {
             color: #e74c3c;
             font-size: 14px;
-            margin-top: 5px;
+            margin-top: 8px;
+            font-weight: 500;
             animation: shake 0.5s ease-in-out;
-        }
-        
-        .banks-list {
-            max-height: 200px;
-            overflow-y: auto;
         }
         
         /* Modal styles */
@@ -173,37 +333,52 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(0,0,0,0.7);
             z-index: 1000;
             align-items: center;
             justify-content: center;
+            backdrop-filter: blur(5px);
         }
         
         .modal-content {
-            background-color: white;
-            padding: 30px;
+            background-color: var(--card-color);
+            padding: 40px;
             border-radius: var(--border-radius);
-            max-width: 400px;
+            max-width: 450px;
             width: 90%;
             text-align: center;
             box-shadow: var(--box-shadow);
             position: relative;
+            border: 1px solid rgba(var(--primary-color), 0.1);
         }
         
         .success-icon {
-            font-size: 70px;
+            font-size: 80px;
             color: var(--success-color);
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             display: block;
         }
         
+        .modal-content h2 {
+            margin-bottom: 15px;
+            color: var(--text-color);
+            font-size: 24px;
+        }
+        
+        .modal-content p {
+            margin-bottom: 12px;
+            color: var(--text-color);
+            opacity: 0.9;
+        }
+        
         .close-modal {
-            margin-top: 20px;
-            background-color: var(--success-color);
+            margin-top: 25px;
+            background: linear-gradient(135deg, var(--success-color), #2e7d32);
+            padding: 14px 20px;
         }
         
         .close-modal:hover {
-            background-color: #3d9140;
+            background: linear-gradient(135deg, #2e7d32, var(--success-color));
         }
         
         /* Animations */
@@ -213,7 +388,7 @@
         }
         
         @keyframes slideUp {
-            from { transform: translateY(20px); opacity: 0; }
+            from { transform: translateY(30px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
         
@@ -230,11 +405,11 @@
         }
         
         .animate-fadeIn {
-            animation: fadeIn 0.5s ease-in-out;
+            animation: fadeIn 0.6s ease-in-out;
         }
         
         .animate-slideUp {
-            animation: slideUp 0.5s ease-in-out;
+            animation: slideUp 0.6s ease-in-out;
         }
         
         .animate-pulse {
@@ -244,10 +419,10 @@
         /* Loading spinner */
         .spinner {
             display: none;
-            width: 40px;
-            height: 40px;
-            margin: 20px auto;
-            border: 4px solid rgba(0,0,0,0.1);
+            width: 50px;
+            height: 50px;
+            margin: 25px auto;
+            border: 4px solid rgba(var(--primary-color), 0.1);
             border-radius: 50%;
             border-top-color: var(--primary-color);
             animation: spin 1s ease-in-out infinite;
@@ -256,12 +431,37 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .balance-amount {
+                font-size: 28px;
+            }
+            
+            input, select, button {
+                padding: 14px;
+            }
+        }
     </style>
 </head>
 <body>
+    <div id="particles-js"></div>
+    
+    <button class="theme-toggle" id="theme-toggle">
+        <i class="fas fa-moon"></i>
+    </button>
+    
     <div class="container animate-fadeIn" id="form-container">
         <div class="logo-container">
-            <img src="earnhive.jpg" alt="EarnHive Logo" class="logo" id="logo-image">
+            <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/earnhive.jpg-Ui2lTIFBrOVAFF0x9DnosWa0LfAPTA.jpeg" alt="EarnHive Logo" class="logo" id="logo-image">
         </div>
         
         <h1 class="animate-slideUp">Withdrawal Request</h1>
@@ -280,30 +480,47 @@
             
             <div class="form-group">
                 <label for="bank-name">Bank Name</label>
-                <select id="bank-name" required>
-                    <option value="">Select your bank</option>
-                    <option value="Access Bank">Access Bank</option>
-                    <option value="Fidelity Bank">Fidelity Bank</option>
-                    <option value="First Bank">First Bank</option>
-                    <option value="First City Monument Bank">FCMB</option>
-                    <option value="GT Bank">GT Bank</option>
-                    <option value="Kuda Bank">Kuda Bank</option>
-                    <option value="Opay">Opay</option>
-                    <option value="Palmpay">Palmpay</option>
-                    <option value="Polaris Bank">Polaris Bank</option>
-                    <option value="Stanbic IBTC">Stanbic IBTC</option>
-                    <option value="Sterling Bank">Sterling Bank</option>
-                    <option value="UBA">UBA</option>
-                    <option value="Union Bank">Union Bank</option>
-                    <option value="Unity Bank">Unity Bank</option>
-                    <option value="Wema Bank">Wema Bank</option>
-                    <option value="Zenith Bank">Zenith Bank</option>
-                </select>
+                <div class="select-wrapper">
+                    <select id="bank-name" required>
+                        <option value="">Select your bank</option>
+                        <option value="Access Bank">Access Bank</option>
+                        <option value="Ecobank">Ecobank</option>
+                        <option value="Fidelity Bank">Fidelity Bank</option>
+                        <option value="First Bank">First Bank</option>
+                        <option value="First City Monument Bank">FCMB</option>
+                        <option value="GT Bank">GT Bank</option>
+                        <option value="Heritage Bank">Heritage Bank</option>
+                        <option value="Keystone Bank">Keystone Bank</option>
+                        <option value="Kuda Bank">Kuda Bank</option>
+                        <option value="Moniepoint">Moniepoint</option>
+                        <option value="Opay">Opay</option>
+                        <option value="Palmpay">Palmpay</option>
+                        <option value="Parallex Bank">Parallex Bank</option>
+                        <option value="Polaris Bank">Polaris Bank</option>
+                        <option value="Providus Bank">Providus Bank</option>
+                        <option value="Stanbic IBTC">Stanbic IBTC</option>
+                        <option value="Standard Chartered">Standard Chartered</option>
+                        <option value="Sterling Bank">Sterling Bank</option>
+                        <option value="SunTrust Bank">SunTrust Bank</option>
+                        <option value="TAJ Bank">TAJ Bank</option>
+                        <option value="Titan Trust Bank">Titan Trust Bank</option>
+                        <option value="UBA">UBA</option>
+                        <option value="Union Bank">Union Bank</option>
+                        <option value="Unity Bank">Unity Bank</option>
+                        <option value="VFD Microfinance Bank">VFD Microfinance Bank</option>
+                        <option value="Wema Bank">Wema Bank</option>
+                        <option value="Zenith Bank">Zenith Bank</option>
+                    </select>
+                </div>
+                <div class="error" id="bank-error"></div>
             </div>
             
             <div class="form-group">
                 <label for="amount">Amount (₦)</label>
-                <input type="number" id="amount" min="700" required>
+                <div class="amount-wrapper">
+                    <input type="number" id="amount" min="700" required>
+                    <button type="button" id="max-button" class="max-button">MAX</button>
+                </div>
                 <div class="error" id="amount-error"></div>
             </div>
             
@@ -316,7 +533,9 @@
     <!-- Success Modal -->
     <div class="modal" id="success-modal">
         <div class="modal-content animate-fadeIn">
-            <span class="success-icon animate-pulse">✅</span>
+            <span class="success-icon animate-pulse">
+                <i class="fas fa-check-circle"></i>
+            </span>
             <h2>Withdrawal Successful!</h2>
             <p>Your withdrawal request has been submitted successfully.</p>
             <p>Amount: ₦<span id="success-amount">0.00</span></p>
@@ -326,6 +545,9 @@
         </div>
     </div>
 
+    <!-- Particles.js -->
+    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    
     <script>
         // Initialize Telegram WebApp
         const tgApp = window.Telegram.WebApp;
@@ -336,6 +558,7 @@
         const accountInput = document.getElementById('account-number');
         const bankSelect = document.getElementById('bank-name');
         const amountInput = document.getElementById('amount');
+        const maxButton = document.getElementById('max-button');
         const balanceDisplay = document.getElementById('user-balance');
         const formContainer = document.getElementById('form-container');
         const successModal = document.getElementById('success-modal');
@@ -346,14 +569,162 @@
         const closeModalBtn = document.getElementById('close-modal-btn');
         const loadingSpinner = document.getElementById('loading-spinner');
         const logoImage = document.getElementById('logo-image');
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = themeToggle.querySelector('i');
         
         // Get user_id and balance from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const userId = urlParams.get('user_id');
         let userBalance = 0;
         
-        // Set logo image (replace with your actual logo URL)
+        // Set logo image
         logoImage.src = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/earnhive.jpg-Ui2lTIFBrOVAFF0x9DnosWa0LfAPTA.jpeg";
+        
+        // Initialize particles.js
+        particlesJS('particles-js', {
+            "particles": {
+                "number": {
+                    "value": 30,
+                    "density": {
+                        "enable": true,
+                        "value_area": 800
+                    }
+                },
+                "color": {
+                    "value": "#ffffff"
+                },
+                "shape": {
+                    "type": "circle",
+                    "stroke": {
+                        "width": 0,
+                        "color": "#000000"
+                    },
+                    "polygon": {
+                        "nb_sides": 5
+                    }
+                },
+                "opacity": {
+                    "value": 0.9,
+                    "random": false,
+                    "anim": {
+                        "enable": false,
+                        "speed": 1,
+                        "opacity_min": 0.1,
+                        "sync": false
+                    }
+                },
+                "size": {
+                    "value": 3,
+                    "random": true,
+                    "anim": {
+                        "enable": false,
+                        "speed": 40,
+                        "size_min": 0.1,
+                        "sync": false
+                    }
+                },
+                "line_linked": {
+                    "enable": true,
+                    "distance": 150,
+                    "color": "#ffd700",
+                    "opacity": 0.2,
+                    "width": 1
+                },
+                "move": {
+                    "enable": true,
+                    "speed": 2,
+                    "direction": "none",
+                    "random": false,
+                    "straight": false,
+                    "out_mode": "out",
+                    "bounce": false,
+                    "attract": {
+                        "enable": false,
+                        "rotateX": 600,
+                        "rotateY": 1200
+                    }
+                }
+            },
+            "interactivity": {
+                "detect_on": "canvas",
+                "events": {
+                    "onhover": {
+                        "enable": true,
+                        "mode": "grab"
+                    },
+                    "onclick": {
+                        "enable": true,
+                        "mode": "push"
+                    },
+                    "resize": true
+                },
+                "modes": {
+                    "grab": {
+                        "distance": 140,
+                        "line_linked": {
+                            "opacity": 0.5
+                        }
+                    },
+                    "bubble": {
+                        "distance": 400,
+                        "size": 40,
+                        "duration": 2,
+                        "opacity": 8,
+                        "speed": 3
+                    },
+                    "repulse": {
+                        "distance": 200,
+                        "duration": 0.4
+                    },
+                    "push": {
+                        "particles_nb": 4
+                    },
+                    "remove": {
+                        "particles_nb": 2
+                    }
+                }
+            },
+            "retina_detect": true
+        });
+        
+        // Theme toggle functionality
+        themeToggle.addEventListener('click', () => {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            html.setAttribute('data-theme', newTheme);
+            
+            // Update icon
+            if (newTheme === 'dark') {
+                themeIcon.classList.remove('fa-sun');
+                themeIcon.classList.add('fa-moon');
+            } else {
+                themeIcon.classList.remove('fa-moon');
+                themeIcon.classList.add('fa-sun');
+            }
+            
+            // Save preference
+            localStorage.setItem('theme', newTheme);
+        });
+        
+        // Set initial theme based on saved preference or system preference
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            if (savedTheme === 'light') {
+                themeIcon.classList.remove('fa-moon');
+                themeIcon.classList.add('fa-sun');
+            }
+        } else {
+            // Check system preference
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+            if (!prefersDark) {
+                themeIcon.classList.remove('fa-moon');
+                themeIcon.classList.add('fa-sun');
+            }
+        }
         
         // Function to format currency
         function formatCurrency(amount) {
@@ -390,6 +761,21 @@
             form.style.opacity = '1';
             form.style.pointerEvents = 'auto';
         }
+        
+        // MAX button functionality
+        maxButton.addEventListener('click', function() {
+            if (userBalance >= 700) {
+                amountInput.value = userBalance;
+                // Clear any error
+                amountError.textContent = '';
+            } else {
+                amountError.textContent = 'Insufficient balance for withdrawal';
+                amountError.classList.add('animate-shake');
+                setTimeout(() => {
+                    amountError.classList.remove('animate-shake');
+                }, 500);
+            }
+        });
         
         // If we have a user_id, fetch the latest balance
         if (userId) {
@@ -515,11 +901,14 @@
                     
                     // Show success modal
                     showSuccessModal(amount, newBalance);
-
+                    
+                    // Send data back to Telegram
+                    tgApp.sendData(JSON.stringify(withdrawalData));
+                    
+                    // Auto close after 3 seconds
                     setTimeout(() => {
                         tgApp.close();
                     }, 3000);
-                            
                 } else {
                     // Show error
                     amountError.textContent = data.message || 'Error processing withdrawal';
@@ -537,7 +926,9 @@
                 
                 // Show success modal
                 showSuccessModal(amount, newBalance);
-              
+                
+                // Send data back to Telegram - this is crucial for admin notifications
+                tgApp.sendData(JSON.stringify(withdrawalData));
             });
         });
         
