@@ -124,22 +124,18 @@ async def check_joined(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check database for subscription status
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT channel1_joined, channel2_joined FROM subscriptions WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT channel1_joined FROM subscriptions WHERE user_id = %s", (user_id,))
     result = cursor.fetchone()
     conn.close()
     
-    if not result or result[0] == 0 or result[1] == 0:
-        # User hasn't joined all channels, check current status
+    if not result or result[0] == 0:
+        # User hasn't joined channel 1, check current status
         try:
             # Check first channel
             member1 = await context.bot.get_chat_member(chat_id=TELEGRAM_CHANNEL1_ID, user_id=user_id)
             channel1_joined = member1.status in ['member', 'administrator', 'creator']
             
-            # Check second channel
-            member2 = await context.bot.get_chat_member(chat_id=TELEGRAM_CHANNEL2_ID, user_id=user_id)
-            channel2_joined = member2.status in ['member', 'administrator', 'creator']
-            
-            # Update database
+            # Update database - set channel2_joined to 1 by default to ignore it
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute('''
@@ -148,24 +144,22 @@ async def check_joined(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ON CONFLICT (user_id) 
             DO UPDATE SET 
                 channel1_joined = EXCLUDED.channel1_joined,
-                channel2_joined = EXCLUDED.channel2_joined
-            ''', (user_id, int(channel1_joined), int(channel2_joined)))
+                channel2_joined = 1
+            ''', (user_id, int(channel1_joined), 1))  # Always set channel2_joined to 1
 
             conn.commit()
             conn.close()
             
-            if not channel1_joined or not channel2_joined:
-                # User hasn't joined all channels
+            if not channel1_joined:
+                # User hasn't joined channel 1
                 keyboard = [
                     [InlineKeyboardButton("🔗 Join Channel 1", url=f"{TELEGRAM_CHANNEL1_URL}")],
-                    [InlineKeyboardButton("🔗 Join Channel 2", url=f"{TELEGRAM_CHANNEL2_URL}")],
                     [InlineKeyboardButton("🔗 Join WhatsApp Channel I", url=WHATSAPP_LINK, callback_data="whatsapp_clicked")],
-                    [InlineKeyboardButton("🔗 Join Betting Group II", url="https://chat.whatsapp.com/Hy80h6Xd8olJg8PiVYpJRI")],
                     [InlineKeyboardButton("✅ Check My Subscription", callback_data="check_subscription")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.effective_message.reply_text(
-                    "You need to join our channels and WhatsApp group to use this bot:",
+                    "You need to join our channel and WhatsApp group to use this bot:",
                     reply_markup=reply_markup
                 )
                 return False
@@ -222,6 +216,7 @@ async def check_joined(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reward_referrer(referrer_id, context)
     
     return True
+
 
 import random
 import string
@@ -501,9 +496,8 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_top_earners(update, context)
     elif text == '📢 Channels & Groups':
         keyboard = [
-                    [InlineKeyboardButton("🔗 Join Channel 1", url=f"{TELEGRAM_CHANNEL2_URL}")],
+                    [InlineKeyboardButton("🔗 Join Channel 1", url=f"{TELEGRAM_CHANNEL1_URL}")],
                     [InlineKeyboardButton("🔗 Join WhatsApp Channel I", url=WHATSAPP_LINK, callback_data="whatsapp_clicked")],
-                    [InlineKeyboardButton("🔗 Join Betting Group II", url="https://chat.whatsapp.com/Hy80h6Xd8olJg8PiVYpJRI")],
                     [InlineKeyboardButton("✅ Check My Subscription", callback_data="check_subscription")]
                 ]
         reply_markup = InlineKeyboardMarkup(keyboard)
